@@ -1,0 +1,13 @@
+# Firebase
+.firebase/
+firebase-debug.log
+
+# Node
+node_modules/
+
+# Emulator data
+emulator-data/
+ui-debug.log
+firestore-debug.log
+database-debug.log
+pubsub-debug.log

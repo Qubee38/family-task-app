@@ -1,0 +1,27 @@
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+
+# Secrets
+*.pem
+.env.local
+.env.*.local
+
+# Docker
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# memo
+memo/
