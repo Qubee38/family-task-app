@@ -1,15 +1,11 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StatusBar } from 'react-native';
 import { AuthProvider } from './src/contexts/AuthContext';
 import AppNavigator from './src/navigation/AppNavigator';
-import { initFirebase } from './src/config/firebase';
+
+// firebase.ts で自動的に initFirebase() が実行される
 
 export default function App() {
-  useEffect(() => {
-    // Firebase初期化
-    initFirebase();
-  }, []);
-
   return (
     <AuthProvider>
       <StatusBar barStyle="dark-content" />

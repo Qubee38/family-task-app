@@ -1,27 +1,37 @@
 {
   "expo": {
     "name": "FamilyTaskApp",
-    "slug": "FamilyTaskApp",
+    "slug": "family-task-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "extra": {
+      "apiBaseUrl": "http://localhost:8000",
+      "useFirebaseEmulator": true,
+      "firebaseAuthEmulatorHost": "localhost",
+      "firebaseAuthEmulatorPort": 9099,
+      "firestoreEmulatorHost": "localhost",
+      "firestoreEmulatorPort": 8080
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.familytaskapp"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "package": "com.yourcompany.familytaskapp"
     },
     "web": {
       "favicon": "./assets/favicon.png"

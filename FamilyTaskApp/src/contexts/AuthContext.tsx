@@ -1,7 +1,10 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { signInWithEmailAndPassword, signInWithCustomToken, signOut as firebaseSignOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '../config/firebase';
-import axios from 'axios';
+import api from '../services/api';
+import { UserResponse } from '../types';
+import { getAuthErrorMessage } from '../constants';
+import { logger } from '../utils/logger';
 
 interface AuthContextType {
   user: User | null;
@@ -19,19 +22,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log('🔹 認証状態変化:', firebaseUser?.email || 'ログアウト');
+      logger.debug('認証状態変化:', firebaseUser?.email || 'ログアウト');
       
       if (firebaseUser) {
         try {
-          const idToken = await firebaseUser.getIdToken();
-          const response = await axios.get('http://localhost:8000/api/auth/me', {
-            headers: {
-              Authorization: `Bearer ${idToken}`,
-            },
-          });
-          console.log('✅ ユーザー情報取得成功:', response.data);
+          const response = await api.get('/api/auth/me');
+          logger.info('ユーザー情報取得成功:', response.data.email);
         } catch (error) {
-          console.error('❌ ユーザー情報取得エラー:', error);
+          logger.error('ユーザー情報取得エラー:', error);
         }
       }
       
@@ -44,37 +42,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signUp = async (email: string, password: string, displayName: string) => {
     try {
-      console.log('🔹 登録開始:', email);
+      logger.debug('登録開始:', email);
       
-      // 直接axiosで送信（apiインスタンスを使わない）
-      const response = await axios.post(
-        'http://localhost:8000/api/auth/register',
-        {
-          email: email,
-          password: password,
-          displayName: displayName,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      // バックエンドでユーザー登録
+      const response = await api.post<UserResponse>('/api/auth/register', {
+        email,
+        password,
+        displayName,
+      });
 
-      console.log('✅ バックエンド登録成功:', response.data);
+      logger.info('バックエンド登録成功:', response.data.uid);
 
       const { customToken } = response.data;
 
-      console.log('🔹 カスタムトークンでサインイン');
+      // カスタムトークンでFirebase Authにサインイン
+      logger.debug('カスタムトークンでサインイン');
       await signInWithCustomToken(auth, customToken);
 
-      console.log('✅ 登録完了');
+      logger.info('登録完了');
     } catch (error: any) {
-      console.error('❌ 登録エラー:', error);
-      console.error('❌ エラー詳細:', error.response?.data);
+      logger.error('登録エラー:', error);
       
-      let errorMessage = '登録に失敗しました';
+      let errorMessage = getAuthErrorMessage(error.code, 'default/register');
       
+      // Pydanticバリデーションエラー
       if (error.response?.data?.detail) {
         const detail = error.response.data.detail;
         if (Array.isArray(detail)) {
@@ -90,37 +81,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, password: string) => {
     try {
-      console.log('🔹 ログイン開始:', email);
+      logger.debug('ログイン開始:', email);
       
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log('✅ Firebase Authログイン成功:', userCredential.user.uid);
+      logger.info('Firebase Authログイン成功:', userCredential.user.uid);
     } catch (error: any) {
-      console.error('❌ ログインエラー:', error);
+      logger.error('ログインエラー:', error);
       
-      let errorMessage = 'ログインに失敗しました';
-      if (error.code === 'auth/user-not-found') {
-        errorMessage = 'ユーザーが見つかりません';
-      } else if (error.code === 'auth/wrong-password') {
-        errorMessage = 'パスワードが間違っています';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'メールアドレスの形式が正しくありません';
-      } else if (error.code === 'auth/invalid-credential') {
-        errorMessage = 'メールアドレスまたはパスワードが間違っています';
-      }
-      
+      const errorMessage = getAuthErrorMessage(error.code, 'default/login');
       throw new Error(errorMessage);
     }
   };
 
   const signOut = async () => {
     try {
-      console.log('🔹 ログアウト開始');
+      logger.debug('ログアウト開始');
       await firebaseSignOut(auth);
-      console.log('✅ ログアウト成功');
+      logger.info('ログアウト成功');
       setUser(null);
     } catch (error) {
-      console.error('❌ ログアウトエラー:', error);
-      throw error;
+      logger.error('ログアウトエラー:', error);
+      throw new Error(getAuthErrorMessage('default/logout'));
     }
   };
 
