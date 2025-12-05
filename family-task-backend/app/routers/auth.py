@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, HTTPException, Depends, status
 from app.models.user import UserCreate, UserResponse, UserInDB, LoginRequest
 from app.services.auth_service import AuthService
@@ -80,6 +79,71 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Login failed: {str(e)}"
+        )
+
+@router.post("/debug/get-token")
+async def debug_get_token(
+    login_data: LoginRequest,
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    """
+    デバッグ用: Firebase ID Token取得
+    
+    ⚠️ 開発環境専用 - 本番環境では削除すること
+    """
+    try:
+        from firebase_admin import auth
+        
+        # メールアドレスでユーザーを検索
+        user = auth.get_user_by_email(login_data.email)
+        
+        # カスタムトークン生成
+        custom_token = auth.create_custom_token(user.uid)
+        
+        # Firebase REST APIを使ってID Tokenに変換
+        # 注意: これは通常クライアント側で行う処理
+        import requests
+        
+        # Firebase Auth Emulator用のエンドポイント
+        emulator_url = "http://firebase-emulator:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=fake-api-key"
+        
+        response = requests.post(
+            emulator_url,
+            json={
+                "token": custom_token.decode('utf-8'),
+                "returnSecureToken": True
+            }
+        )
+        
+        if response.status_code == 200:
+            token_data = response.json()
+            return {
+                "success": True,
+                "uid": user.uid,
+                "email": user.email,
+                "displayName": user.display_name,
+                "idToken": token_data["idToken"],
+                "refreshToken": token_data["refreshToken"],
+                "expiresIn": token_data["expiresIn"]
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to get ID token: {response.text}"
+            )
+        
+    except auth.UserNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    except Exception as e:
+        print(f"❌ トークン取得エラー: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Token generation failed: {str(e)}"
         )
 
 @router.get("/me", response_model=UserInDB)
