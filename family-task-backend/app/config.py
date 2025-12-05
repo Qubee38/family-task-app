@@ -2,9 +2,8 @@ import os
 import firebase_admin
 from firebase_admin import credentials, auth
 from google.cloud import firestore
-from dotenv import load_dotenv
-
-load_dotenv()
+from app.core.settings import settings
+from app.utils.logger import logger
 
 _firestore_client = None
 
@@ -14,49 +13,44 @@ def init_firebase():
     
     # すでに初期化されている場合はスキップ
     if len(firebase_admin._apps) > 0:
-        print("✅ Firebase already initialized")
+        logger.info("Firebase already initialized")
         return
     
-    use_emulator = os.getenv("USE_FIREBASE_EMULATOR", "False") == "True"
-    
-    print(f"USE_FIREBASE_EMULATOR: {use_emulator}")
-    
-    if use_emulator:
-        print("🔧 Firebase Emulatorに接続します")
+    if settings.USE_FIREBASE_EMULATOR:
+        logger.info("Connecting to Firebase Emulator")
         
         # 環境変数を設定
-        firestore_host = os.getenv("FIRESTORE_EMULATOR_HOST", "firebase-emulator:8080")
-        auth_host = os.getenv("FIREBASE_AUTH_EMULATOR_HOST", "firebase-emulator:9099")
+        os.environ["FIRESTORE_EMULATOR_HOST"] = settings.FIRESTORE_EMULATOR_HOST
+        os.environ["FIREBASE_AUTH_EMULATOR_HOST"] = settings.FIREBASE_AUTH_EMULATOR_HOST
+        os.environ["GCLOUD_PROJECT"] = settings.FIREBASE_PROJECT_ID
         
-        os.environ["FIRESTORE_EMULATOR_HOST"] = firestore_host
-        os.environ["FIREBASE_AUTH_EMULATOR_HOST"] = auth_host
-        os.environ["GCLOUD_PROJECT"] = "demo-project"
-        
-        print(f"  FIRESTORE_EMULATOR_HOST: {firestore_host}")
-        print(f"  FIREBASE_AUTH_EMULATOR_HOST: {auth_host}")
+        logger.debug(f"FIRESTORE_EMULATOR_HOST: {settings.FIRESTORE_EMULATOR_HOST}")
+        logger.debug(f"FIREBASE_AUTH_EMULATOR_HOST: {settings.FIREBASE_AUTH_EMULATOR_HOST}")
         
         # Firebase Admin SDK（Authのみ）を初期化
         firebase_admin.initialize_app(options={
-            'projectId': 'demo-project',
+            'projectId': settings.FIREBASE_PROJECT_ID,
         })
         
         # Firestore クライアントを直接作成（エミュレータ用）
-        _firestore_client = firestore.Client(project='demo-project')
+        _firestore_client = firestore.Client(project=settings.FIREBASE_PROJECT_ID)
         
-        print("✅ Firebase Emulator initialized")
-        print(f"✅ Firestore client created for emulator")
+        logger.info("Firebase Emulator initialized successfully")
         
     else:
-        print("🔥 本番Firebaseに接続します")
-        cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
-        cred = credentials.Certificate(cred_path)
+        logger.info("Connecting to Production Firebase")
+        
+        if not settings.FIREBASE_CREDENTIALS_PATH:
+            raise ValueError("FIREBASE_CREDENTIALS_PATH is required for production")
+        
+        cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
         firebase_admin.initialize_app(cred)
         
         # 本番用Firestoreクライアント
         from firebase_admin import firestore as admin_firestore
         _firestore_client = admin_firestore.client()
         
-        print("✅ Firebase initialized")
+        logger.info("Production Firebase initialized successfully")
 
 def get_firestore_client():
     """Firestoreクライアント取得"""

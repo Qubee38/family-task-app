@@ -1,7 +1,7 @@
-import os
 from datetime import datetime
 from app.models.user import UserCreate, UserResponse, UserInDB
 from app.config import get_firestore_client, get_auth_client
+from app.utils.logger import logger
 
 class AuthService:
     def __init__(self):
@@ -12,10 +12,9 @@ class AuthService:
     def db(self):
         """Firestoreクライアントの遅延初期化"""
         if self._db is None:
-            print(f"🔹 Firestoreクライアント取得中...")
-            # config.pyのget_firestore_client()を使う
+            logger.debug("Getting Firestore client...")
             self._db = get_firestore_client()
-            print(f"✅ Firestoreクライアント取得成功")
+            logger.debug("Firestore client obtained successfully")
         return self._db
     
     @property
@@ -28,21 +27,19 @@ class AuthService:
     def register_user(self, user_data: UserCreate) -> UserResponse:
         """ユーザー新規登録"""
         try:
-            print(f"🔹 ユーザー登録開始: {user_data.email}")
-            print(f"  FIREBASE_AUTH_EMULATOR_HOST: {os.getenv('FIREBASE_AUTH_EMULATOR_HOST', 'Not set')}")
-            print(f"  FIRESTORE_EMULATOR_HOST: {os.getenv('FIRESTORE_EMULATOR_HOST', 'Not set')}")
+            logger.info(f"Starting user registration: {user_data.email}")
             
             # Firebase Authenticationでユーザー作成
-            print(f"🔹 Firebase Auth でユーザー作成中...")
+            logger.debug("Creating user in Firebase Auth...")
             user = self.auth.create_user(
                 email=user_data.email,
                 password=user_data.password,
                 display_name=user_data.displayName
             )
-            print(f"✅ Firebase Auth ユーザー作成成功: {user.uid}")
+            logger.info(f"Firebase Auth user created: {user.uid}")
             
             # Firestoreにユーザー情報を保存
-            print(f"🔹 Firestore にユーザー情報保存中...")
+            logger.debug("Saving user data to Firestore...")
             now = datetime.utcnow()
             user_doc = {
                 "uid": user.uid,
@@ -53,14 +50,13 @@ class AuthService:
                 "updatedAt": now
             }
             
-            # ここでFirestoreクライアントを取得して保存
             self.db.collection("Users").document(user.uid).set(user_doc)
-            print(f"✅ Firestore ユーザー情報保存成功")
+            logger.info("User data saved to Firestore successfully")
             
             # カスタムトークン生成
-            print(f"🔹 カスタムトークン生成中...")
+            logger.debug("Generating custom token...")
             custom_token = self.auth.create_custom_token(user.uid)
-            print(f"✅ カスタムトークン生成成功")
+            logger.info("Custom token generated successfully")
             
             return UserResponse(
                 uid=user.uid,
@@ -72,9 +68,7 @@ class AuthService:
             )
             
         except Exception as e:
-            import traceback
-            print(f"❌ 登録エラー詳細:")
-            print(traceback.format_exc())
+            logger.error(f"Registration error: {str(e)}", exc_info=True)
             
             if "already exists" in str(e).lower():
                 raise ValueError("Email already exists")

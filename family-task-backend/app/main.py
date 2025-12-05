@@ -1,34 +1,40 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import os
 
 # 環境変数読み込み（最優先）
 load_dotenv()
 
-# Firebase初期化（アプリケーション起動前に実行）
-print("=" * 50)
-print("Initializing Firebase...")
-print("=" * 50)
+from app.core.settings import settings
+from app.utils.logger import setup_logger
+
+# ロガーセットアップ
+logger = setup_logger("family_task_api", level=settings.LOG_LEVEL)
+
+# Firebase初期化
+logger.info("=" * 50)
+logger.info("Initializing Firebase...")
+logger.info("=" * 50)
 
 from app.config import init_firebase
 init_firebase()
 
-print("=" * 50)
-print("Firebase initialization complete")
-print("=" * 50)
+logger.info("=" * 50)
+logger.info("Firebase initialization complete")
+logger.info("=" * 50)
 
 # FastAPIアプリケーション作成
 app = FastAPI(
     title="Family Task Management API",
     description="家族向けタスク管理アプリのバックエンドAPI",
-    version="1.0.0"
+    version="1.0.0",
+    debug=settings.DEBUG
 )
 
 # CORS設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -55,6 +61,6 @@ def health_check():
 @app.on_event("startup")
 async def startup_event():
     """アプリケーション起動時の処理"""
-    print("✅ Application startup complete")
-    print(f"FIRESTORE_EMULATOR_HOST: {os.getenv('FIRESTORE_EMULATOR_HOST', 'Not set')}")
-    print(f"FIREBASE_AUTH_EMULATOR_HOST: {os.getenv('FIREBASE_AUTH_EMULATOR_HOST', 'Not set')}")
+    logger.info("Application startup complete")
+    logger.info(f"USE_FIREBASE_EMULATOR: {settings.USE_FIREBASE_EMULATOR}")
+    logger.info(f"LOG_LEVEL: {settings.LOG_LEVEL}")

@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.config import get_auth_client, get_firestore_client
 from app.services.auth_service import AuthService
+from app.utils.logger import logger
 
 security = HTTPBearer()
 
@@ -15,7 +16,7 @@ async def get_current_user(
         # Firebase ID Tokenを検証
         decoded_token = auth.verify_id_token(credentials.credentials)
         
-        print(f"🔹 トークン検証成功: {decoded_token['uid']}")
+        logger.debug(f"Token verified for user: {decoded_token['uid']}")
         
         # Firestoreからユーザー情報を取得
         db = get_firestore_client()
@@ -23,14 +24,14 @@ async def get_current_user(
         user_doc = user_ref.get()
         
         if not user_doc.exists:
-            print(f"❌ ユーザーが見つかりません: {decoded_token['uid']}")
+            logger.warning(f"User not found in Firestore: {decoded_token['uid']}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
         
         user_data = user_doc.to_dict()
-        print(f"✅ ユーザー情報取得成功: {user_data['email']}")
+        logger.debug(f"User data retrieved: {user_data['email']}")
         
         return {
             "uid": decoded_token["uid"],
@@ -39,10 +40,10 @@ async def get_current_user(
             **user_data
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"❌ 認証エラー: {str(e)}")
-        import traceback
-        print(traceback.format_exc())
+        logger.error(f"Authentication error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"認証に失敗しました: {str(e)}"
