@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, ScrollView, Modal } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
+import { useFamily } from '../contexts/FamilyContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function HomeScreen() {
+  const navigation = useNavigation();
   const { user, signOut } = useAuth();
+  const { selectedFamily } = useFamily();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const handleLogout = async () => {
     console.log('🔹 handleLogout called');
+    
+    // メニューを閉じる
+    setShowUserMenu(false);
     
     // Web環境ではカスタムダイアログを使用、ネイティブではAlertを使用
     if (Platform.OS === 'web') {
@@ -49,25 +57,131 @@ export default function HomeScreen() {
     }
   };
 
+  const handleMenuAction = (action: string) => {
+    setShowUserMenu(false);
+    
+    switch (action) {
+      case 'manage':
+        navigation.navigate('FamilyManage' as never);
+        break;
+      case 'switch':
+        navigation.navigate('FamilyList' as never);
+        break;
+      case 'logout':
+        handleLogout();
+        break;
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>ホーム画面</Text>
-      
-      <View style={styles.userInfo}>
-        <Text style={styles.label}>ようこそ！</Text>
-        <Text style={styles.email}>{user?.email || '不明'}</Text>
-        <Text style={styles.uid}>UID: {user?.uid || '不明'}</Text>
+      {/* ヘッダー */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>{selectedFamily?.name || 'ファミリータスク'}</Text>
+          {selectedFamily && (
+            <Text style={styles.headerSubtitle}>👥 {selectedFamily.members?.length || 0}人</Text>
+          )}
+        </View>
+        
+        {/* ユーザーアイコン */}
+        <TouchableOpacity 
+          style={styles.userIcon}
+          onPress={() => setShowUserMenu(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.userIconText}>
+            {user?.email?.charAt(0).toUpperCase() || 'U'}
+          </Text>
+        </TouchableOpacity>
       </View>
-      
-      <TouchableOpacity 
-        style={styles.logoutButton} 
-        onPress={handleLogout}
-        activeOpacity={0.7}
+
+      <ScrollView style={styles.content}>
+        {/* プレースホルダー（将来のタスク表示エリア） */}
+        <View style={styles.placeholderCard}>
+          <Text style={styles.placeholderTitle}>📋 今日のタスク</Text>
+          <Text style={styles.placeholderText}>
+            タスク管理機能は次のフェーズで実装予定です
+          </Text>
+        </View>
+
+        <View style={styles.placeholderCard}>
+          <Text style={styles.placeholderTitle}>📅 今日の予定</Text>
+          <Text style={styles.placeholderText}>
+            予定管理機能は次のフェーズで実装予定です
+          </Text>
+        </View>
+
+        <View style={styles.placeholderCard}>
+          <Text style={styles.placeholderTitle}>🛒 買い物リスト</Text>
+          <Text style={styles.placeholderText}>
+            必要物管理機能は次のフェーズで実装予定です
+          </Text>
+        </View>
+      </ScrollView>
+
+      {/* ユーザーメニュー（モーダル） */}
+      <Modal
+        visible={showUserMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowUserMenu(false)}
       >
-        <Text style={styles.logoutButtonText}>ログアウト</Text>
-      </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowUserMenu(false)}
+        >
+          <View style={styles.userMenuContainer}>
+            {/* ユーザー情報 */}
+            <View style={styles.userMenuHeader}>
+              <View style={styles.userMenuIcon}>
+                <Text style={styles.userMenuIconText}>
+                  {user?.email?.charAt(0).toUpperCase() || 'U'}
+                </Text>
+              </View>
+              <View style={styles.userMenuInfo}>
+                <Text style={styles.userMenuName}>{user?.email?.split('@')[0] || 'ユーザー'}</Text>
+                <Text style={styles.userMenuEmail}>{user?.email || '不明'}</Text>
+              </View>
+            </View>
+
+            <View style={styles.menuDivider} />
+
+            {/* メニュー項目 */}
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => handleMenuAction('manage')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.menuItemIcon}>⚙️</Text>
+              <Text style={styles.menuItemText}>家族を管理</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => handleMenuAction('switch')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.menuItemIcon}>🔄</Text>
+              <Text style={styles.menuItemText}>家族を切り替え</Text>
+            </TouchableOpacity>
+
+            <View style={styles.menuDivider} />
+
+            <TouchableOpacity
+              style={[styles.menuItem, styles.logoutMenuItem]}
+              onPress={() => handleMenuAction('logout')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.menuItemIcon}>🚪</Text>
+              <Text style={[styles.menuItemText, styles.logoutText]}>ログアウト</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
       
-      {/* Web用の確認ダイアログ */}
+      {/* Web用のログアウト確認ダイアログ */}
       <ConfirmDialog
         visible={showLogoutDialog}
         title="ログアウト"
@@ -90,55 +204,151 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
     backgroundColor: '#f5f5f5',
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    marginBottom: 30,
+  header: {
+    backgroundColor: '#2196F3',
+    paddingTop: 60,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  userInfo: {
-    backgroundColor: '#fff',
+  headerLeft: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  userIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  userIconText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  content: {
+    flex: 1,
     padding: 20,
-    borderRadius: 10,
-    width: '100%',
-    marginBottom: 30,
+  },
+  placeholderCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-  },
-  label: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 10,
-    color: '#333',
-  },
-  email: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 5,
-  },
-  uid: {
-    fontSize: 12,
-    color: '#999',
-    fontFamily: 'monospace',
-  },
-  logoutButton: {
-    backgroundColor: '#FF3B30',
-    paddingVertical: 15,
-    paddingHorizontal: 40,
-    borderRadius: 8,
-    width: '100%',
     alignItems: 'center',
   },
-  logoutButtonText: {
+  placeholderTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+  },
+  
+  // ユーザーメニュー（モーダル）
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: 100,
+    paddingRight: 20,
+  },
+  userMenuContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: 280,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  userMenuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#f8f9fa',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  userMenuIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#2196F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  userMenuIconText: {
+    fontSize: 22,
+    fontWeight: 'bold',
     color: '#fff',
+  },
+  userMenuInfo: {
+    flex: 1,
+  },
+  userMenuName: {
     fontSize: 16,
     fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  userMenuEmail: {
+    fontSize: 12,
+    color: '#666',
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    paddingHorizontal: 20,
+  },
+  menuItemIcon: {
+    fontSize: 20,
+    marginRight: 12,
+    width: 24,
+  },
+  menuItemText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  logoutMenuItem: {
+    backgroundColor: '#fff5f5',
+  },
+  logoutText: {
+    color: '#FF3B30',
   },
 });
