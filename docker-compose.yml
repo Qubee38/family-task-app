@@ -25,4 +25,8 @@ services:
     volumes:
       - ./firebase-project:/app
     working_dir: /app
-    command: firebase emulators:start --project demo-project
+    command: >
+      firebase emulators:start 
+      --project demo-project 
+      --import=/app/emulator-data 
+      --export-on-exit=/app/emulator-data
