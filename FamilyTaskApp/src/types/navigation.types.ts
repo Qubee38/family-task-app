@@ -18,6 +18,8 @@ export type AuthStackParamList = {
 // メインアプリのナビゲーションパラメータ
 // ============================================
 
+import { ItemType } from './item';
+
 export type RootStackParamList = {
   // 家族選択前の画面
   FamilyList: undefined;
@@ -28,24 +30,14 @@ export type RootStackParamList = {
   Home: undefined;
   FamilyManage: undefined;
   
-  // アイテム管理画面
-  ItemList: undefined;
-  CreateEditItem: { itemId?: string } | undefined;  // 編集時はitemIdを渡す
+  // アイテム管理画面（統合）
+  ItemList: { type?: ItemType } | undefined;  // typeで初期フィルターを指定可能
+  ItemForm: { itemId?: string; type?: ItemType } | undefined;  // 編集時はitemId、新規作成時はtype指定可能
   ItemDetail: { itemId: string };
-  
-  // 予定管理画面
-  EventList: undefined;
-  CreateEditEvent: { itemId?: string } | undefined;  // 編集時はitemIdを渡す
-  EventDetail: { itemId: string };
-  
-  // 必要物管理画面
-  NeedList: undefined;
-  CreateEditNeed: { itemId?: string } | undefined;  // 編集時はitemIdを渡す
-  NeedDetail: { itemId: string };
   
   // カテゴリ管理画面
   CategoryList: undefined;
-  CreateEditCategory: { categoryId?: string } | undefined;  // 編集時はcategoryIdを渡す
+  CreateEditCategory: { categoryId?: string } | undefined;
 };
 
 // ============================================

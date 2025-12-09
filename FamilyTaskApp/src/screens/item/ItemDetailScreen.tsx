@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -25,56 +25,80 @@ export default function ItemDetailScreen() {
   const route = useRoute<ItemDetailScreenRouteProp>();
   const { items, deleteItem, completeItem, uncompleteItem, loading } = useItem();
   
+  // route.paramsのundefinedチェック
+  if (!route.params || !route.params.itemId) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.header, { backgroundColor: '#2196F3' }]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>詳細</Text>
+          <View style={styles.headerRight} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>アイテムIDが指定されていません</Text>
+        </View>
+      </View>
+    );
+  }
+  
   const { itemId } = route.params;
-  const [item, setItem] = useState<ItemResponse | null>(null);
+  const item = items.find(i => i.itemId === itemId);
+
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  useEffect(() => {
-    const foundItem = items.find(i => i.itemId === itemId);
-    if (foundItem) {
-      setItem(foundItem);
-    } else {
-      // アイテムが見つからない場合は戻る
-      navigation.goBack();
-    }
-  }, [itemId, items]);
+  if (!item) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>アイテムが見つかりません</Text>
+        </View>
+      </View>
+    );
+  }
 
-  const handleToggleComplete = async () => {
-    if (!item) return;
-
-    try {
-      if (item.isCompleted) {
-        await uncompleteItem(item.itemId);
-        logger.info('タスクを未完了に戻しました');
-      } else {
-        await completeItem(item.itemId);
-        logger.info('タスクを完了しました');
-      }
-    } catch (error: any) {
-      logger.error('タスク完了切り替えエラー:', error);
-      const message = error.response?.data?.detail || error.message || '操作に失敗しました';
-      if (Platform.OS === 'web') {
-        alert(message);
-      } else {
-        Alert.alert('エラー', message);
-      }
-    }
-  };
+  // タイプ別の設定
+  const typeConfig = {
+    task: { 
+      bg: '#2196F3', 
+      title: 'タスク詳細',
+      completedText: '✓ 完了',
+      pendingText: '⏳ 未完了',
+      actionText: item.isCompleted ? '未完了に戻す' : '完了にする',
+    },
+    event: { 
+      bg: '#4CAF50', 
+      title: '予定詳細',
+      completedText: '✓ 完了',
+      pendingText: '⏳ 未完了',
+      actionText: item.isCompleted ? '未完了に戻す' : '完了にする',
+    },
+    need: { 
+      bg: '#FF9800', 
+      title: '必要物詳細',
+      completedText: '✓ 購入済み',
+      pendingText: '⏳ 未購入',
+      actionText: item.isCompleted ? '未購入に戻す' : '購入済みにする',
+    },
+  }[item.type];
 
   const handleEdit = () => {
-    navigation.navigate('CreateEditItem', { itemId: item.itemId });
+    navigation.navigate('ItemForm', { itemId: item.itemId });
   };
 
   const handleDelete = async () => {
-    if (!item) return;
-
     try {
       await deleteItem(item.itemId);
-      logger.info('タスクを削除しました');
+      logger.info('アイテム削除成功');
       navigation.goBack();
     } catch (error: any) {
-      logger.error('タスク削除エラー:', error);
-      const message = error.response?.data?.detail || error.message || 'タスクの削除に失敗しました';
+      logger.error('アイテム削除エラー:', error);
+      const message = error.response?.data?.detail || error.message || 'アイテムの削除に失敗しました';
       if (Platform.OS === 'web') {
         alert(message);
       } else {
@@ -88,8 +112,8 @@ export default function ItemDetailScreen() {
       setShowDeleteDialog(true);
     } else {
       Alert.alert(
-        'タスクを削除',
-        'このタスクを削除してもよろしいですか？',
+        'アイテムを削除',
+        'このアイテムを削除しますか？',
         [
           { text: 'キャンセル', style: 'cancel' },
           { text: '削除', style: 'destructive', onPress: handleDelete },
@@ -98,30 +122,73 @@ export default function ItemDetailScreen() {
     }
   };
 
-  if (!item) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-      </View>
-    );
-  }
+  const handleToggleComplete = async () => {
+    try {
+      if (item.isCompleted) {
+        await uncompleteItem(item.itemId);
+        logger.info('アイテムを未完了に戻しました');
+      } else {
+        await completeItem(item.itemId);
+        logger.info('アイテムを完了にしました');
+      }
+    } catch (error: any) {
+      logger.error('アイテムの完了切替エラー:', error);
+      const message = error.response?.data?.detail || error.message || 'アイテムの更新に失敗しました';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('エラー', message);
+      }
+    }
+  };
 
-  const priorityColor = {
-    high: '#FF3B30',
-    medium: '#FF9500',
-    low: '#34C759',
-  }[item.priority];
+  // 日時フォーマット
+  const formatDate = (dateTimeStr: string) => {
+    const date = new Date(dateTimeStr);
+    return date.toLocaleDateString('ja-JP', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+    });
+  };
 
-  const priorityLabel = {
-    high: '高',
-    medium: '中',
-    low: '低',
-  }[item.priority];
+  const formatDateTime = (dateTimeStr: string) => {
+    const date = new Date(dateTimeStr);
+    return date.toLocaleString('ja-JP', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  // 優先度表示
+  const priorityText = item.priority ? {
+    high: '🔴 高',
+    medium: '🟡 中',
+    low: '🟢 低',
+  }[item.priority] : null;
+
+  // 繰り返し設定の表示
+  const recurrenceText = item.recurrence 
+    ? `${
+        item.recurrence.frequency === 'daily' ? '毎日' :
+        item.recurrence.frequency === 'weekly' ? '毎週' :
+        item.recurrence.frequency === 'monthly' ? '毎月' :
+        '毎年'
+      }（${item.recurrence.interval}${
+        item.recurrence.frequency === 'daily' ? '日' :
+        item.recurrence.frequency === 'weekly' ? '週' :
+        item.recurrence.frequency === 'monthly' ? 'ヶ月' :
+        '年'
+      }ごと）`
+    : null;
 
   return (
     <View style={styles.container}>
       {/* ヘッダー */}
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: typeConfig.bg }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -129,7 +196,7 @@ export default function ItemDetailScreen() {
         >
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>タスク詳細</Text>
+        <Text style={styles.headerTitle}>{typeConfig.title}</Text>
         <View style={styles.headerRight}>
           <TouchableOpacity
             style={styles.editButton}
@@ -150,139 +217,153 @@ export default function ItemDetailScreen() {
 
       <ScrollView style={styles.content}>
         {/* タイトル */}
-        <View style={styles.section}>
+        <View style={styles.titleSection}>
           <Text style={[styles.title, item.isCompleted && styles.titleCompleted]}>
             {item.title}
           </Text>
         </View>
 
-        {/* ステータス */}
-        <View style={styles.section}>
-          <View style={styles.statusContainer}>
-            <View
-              style={[
-                styles.statusBadge,
-                item.isCompleted ? styles.statusBadgeCompleted : styles.statusBadgeActive,
-              ]}
-            >
-              <Text style={styles.statusText}>
-                {item.isCompleted ? '✓ 完了' : '⏳ 未完了'}
-              </Text>
-            </View>
-            <View style={[styles.priorityBadge, { backgroundColor: priorityColor }]}>
-              <Text style={styles.priorityText}>優先度: {priorityLabel}</Text>
-            </View>
+        {/* ステータスバッジ */}
+        <View style={styles.badgeContainer}>
+          <View style={[
+            styles.badge, 
+            item.isCompleted ? styles.badgeCompleted : styles.badgePending,
+            { backgroundColor: item.isCompleted ? typeConfig.bg : '#FFC107' }
+          ]}>
+            <Text style={styles.badgeText}>
+              {item.isCompleted ? typeConfig.completedText : typeConfig.pendingText}
+            </Text>
           </View>
         </View>
 
         {/* 詳細情報 */}
         <View style={styles.detailsCard}>
-          {item.categoryName && (
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>カテゴリ</Text>
+            <Text style={styles.detailValue}>{item.categoryName || '未設定'}</Text>
+          </View>
+
+          {priorityText && (
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>🏷️ カテゴリ</Text>
-              <Text style={styles.detailValue}>{item.categoryName}</Text>
+              <Text style={styles.detailLabel}>優先度</Text>
+              <Text style={styles.detailValue}>{priorityText}</Text>
             </View>
           )}
 
           {item.assignedToName && (
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>👤 担当者</Text>
-              <Text style={styles.detailValue}>{item.assignedToName}</Text>
+              <Text style={styles.detailLabel}>担当者</Text>
+              <Text style={styles.detailValue}>👤 {item.assignedToName}</Text>
             </View>
           )}
 
-          {item.endDateTime && (
+          {item.type === 'event' && item.startDateTime && (
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>📅 期限</Text>
-              <Text style={styles.detailValue}>
-                {new Date(item.endDateTime).toLocaleDateString('ja-JP', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
-              </Text>
+              <Text style={styles.detailLabel}>開始日時</Text>
+              <Text style={styles.detailValue}>📅 {formatDateTime(item.startDateTime)}</Text>
+            </View>
+          )}
+
+          {item.type === 'task' && item.endDateTime && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>期限</Text>
+              <Text style={styles.detailValue}>📅 {formatDateTime(item.endDateTime)}</Text>
+            </View>
+          )}
+
+          {item.type === 'event' && item.endDateTime && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>終了日時</Text>
+              <Text style={styles.detailValue}>📅 {formatDateTime(item.endDateTime)}</Text>
+            </View>
+          )}
+
+          {recurrenceText && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>繰り返し</Text>
+              <Text style={styles.detailValue}>🔄 {recurrenceText}</Text>
             </View>
           )}
 
           {item.location && (
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>📍 場所</Text>
-              <Text style={styles.detailValue}>{item.location}</Text>
+              <Text style={styles.detailLabel}>
+                {item.type === 'need' ? '購入場所' : '場所'}
+              </Text>
+              <Text style={styles.detailValue}>📍 {item.location}</Text>
             </View>
           )}
 
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>👁️ 公開範囲</Text>
+            <Text style={styles.detailLabel}>公開範囲</Text>
             <Text style={styles.detailValue}>
-              {item.visibility === 'family' ? '家族全体' : '自分のみ'}
+              {item.visibility === 'family' ? '👥 家族全体' : '🔒 自分のみ'}
             </Text>
           </View>
 
+          <View style={styles.divider} />
+
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>✍️ 作成者</Text>
+            <Text style={styles.detailLabel}>作成者</Text>
             <Text style={styles.detailValue}>{item.createdByName || '不明'}</Text>
           </View>
 
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>📆 作成日</Text>
-            <Text style={styles.detailValue}>
-              {new Date(item.createdAt).toLocaleDateString('ja-JP')}
-            </Text>
+            <Text style={styles.detailLabel}>作成日</Text>
+            <Text style={styles.detailValue}>{formatDate(item.createdAt)}</Text>
           </View>
 
           {item.isCompleted && item.completedByName && (
             <>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>✅ 完了者</Text>
+                <Text style={styles.detailLabel}>
+                  {item.type === 'need' ? '購入者' : '完了者'}
+                </Text>
                 <Text style={styles.detailValue}>{item.completedByName}</Text>
               </View>
+
               {item.completedAt && (
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>🕐 完了日時</Text>
-                  <Text style={styles.detailValue}>
-                    {new Date(item.completedAt).toLocaleString('ja-JP')}
+                  <Text style={styles.detailLabel}>
+                    {item.type === 'need' ? '購入日時' : '完了日時'}
                   </Text>
+                  <Text style={styles.detailValue}>{formatDateTime(item.completedAt)}</Text>
                 </View>
               )}
             </>
           )}
         </View>
 
-        {/* アクションボタン */}
-        <View style={styles.actionContainer}>
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              item.isCompleted ? styles.actionButtonUncomplete : styles.actionButtonComplete,
-            ]}
-            onPress={handleToggleComplete}
-            disabled={loading}
-            activeOpacity={0.7}
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.actionButtonText}>
-                {item.isCompleted ? '未完了に戻す' : '完了にする'}
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        {/* 完了ボタン */}
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            { backgroundColor: item.isCompleted ? '#FFC107' : typeConfig.bg }
+          ]}
+          onPress={handleToggleComplete}
+          activeOpacity={0.7}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.actionButtonText}>
+              {typeConfig.actionText}
+            </Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
 
-      {/* Web用の削除確認ダイアログ */}
-      <ConfirmDialog
-        visible={showDeleteDialog}
-        title="タスクを削除"
-        message="このタスクを削除してもよろしいですか？"
-        confirmText="削除"
-        cancelText="キャンセル"
-        onConfirm={() => {
-          setShowDeleteDialog(false);
-          handleDelete();
-        }}
-        onCancel={() => setShowDeleteDialog(false)}
-      />
+      {/* 削除確認ダイアログ */}
+      {Platform.OS === 'web' && showDeleteDialog && (
+        <ConfirmDialog
+          visible={showDeleteDialog}
+          title="アイテムを削除"
+          message="このアイテムを削除しますか？"
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteDialog(false)}
+        />
+      )}
     </View>
   );
 }
@@ -293,7 +374,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
-    backgroundColor: '#2196F3',
     paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
@@ -342,13 +422,11 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  section: {
+  titleSection: {
+    backgroundColor: '#fff',
     padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   title: {
     fontSize: 24,
@@ -359,42 +437,34 @@ const styles = StyleSheet.create({
     textDecorationLine: 'line-through',
     color: '#999',
   },
-  statusContainer: {
+  badgeContainer: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
-  statusBadge: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+  badge: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
   },
-  statusBadgeActive: {
-    backgroundColor: '#FF9500',
+  badgeCompleted: {
+    // backgroundColor: タイプごとに動的設定
   },
-  statusBadgeCompleted: {
-    backgroundColor: '#34C759',
+  badgePending: {
+    // backgroundColor: タイプごとに動的設定
   },
-  statusText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  priorityBadge: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-  },
-  priorityText: {
-    fontSize: 14,
-    fontWeight: 'bold',
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '600',
     color: '#fff',
   },
   detailsCard: {
     backgroundColor: '#fff',
-    marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 12,
+    margin: 16,
     padding: 16,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -404,39 +474,51 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
   },
   detailLabel: {
     fontSize: 14,
-    color: '#666',
+    color: '#999',
     flex: 1,
   },
   detailValue: {
     fontSize: 14,
-    fontWeight: '600',
     color: '#333',
-    flex: 1,
+    fontWeight: '500',
+    flex: 2,
     textAlign: 'right',
   },
-  actionContainer: {
-    padding: 20,
+  divider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginVertical: 8,
   },
   actionButton: {
+    margin: 16,
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-  },
-  actionButtonComplete: {
-    backgroundColor: '#34C759',
-  },
-  actionButtonUncomplete: {
-    backgroundColor: '#FF9500',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   actionButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#999',
   },
 });

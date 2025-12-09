@@ -141,27 +141,27 @@ export default function HomeScreen() {
   };
 
   const handleViewAllTasks = () => {
-    navigation.navigate('ItemList');
+    navigation.navigate('ItemList', { type: 'task' });
   };
 
   const handleViewAllEvents = () => {
-    navigation.navigate('EventList');
+    navigation.navigate('ItemList', { type: 'event' });
   };
 
   const handleViewAllNeeds = () => {
-    navigation.navigate('NeedList');
+    navigation.navigate('ItemList', { type: 'need' });
   };
 
   const handleCreateTask = () => {
-    navigation.navigate('CreateEditItem');
+    navigation.navigate('ItemForm', { type: 'task' });
   };
 
   const handleCreateEvent = () => {
-    navigation.navigate('CreateEditEvent');
+    navigation.navigate('ItemForm', { type: 'event' });
   };
 
   const handleCreateNeed = () => {
-    navigation.navigate('CreateEditNeed');
+    navigation.navigate('ItemForm', { type: 'need' });
   };
 
   return (
@@ -242,7 +242,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 key={event.itemId}
                 style={styles.taskItem}
-                onPress={() => navigation.navigate('EventDetail', { itemId: event.itemId })}
+                onPress={() => navigation.navigate('ItemDetail', { itemId: event.itemId })}
                 activeOpacity={0.7}
               >
                 <View style={styles.taskCheckbox} />
@@ -290,7 +290,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={need.itemId}
                   style={styles.taskItem}
-                  onPress={() => navigation.navigate('NeedDetail', { itemId: need.itemId })}
+                  onPress={() => navigation.navigate('ItemDetail', { itemId: need.itemId })}
                   activeOpacity={0.7}
                 >
                   <View style={styles.taskCheckbox} />

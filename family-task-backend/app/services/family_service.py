@@ -106,6 +106,15 @@ class FamilyService:
             member_ref.set(member_doc)
             logger.info(f"Family member added: {member_id} (admin)")
             
+            # ✅ デフォルトカテゴリ自動生成
+            try:
+                from app.services.item_service import create_default_categories_sync
+                create_default_categories_sync(family_id, creator_uid)
+                logger.info(f"Default categories created for family: {family_id}")
+            except Exception as e:
+                logger.warning(f"Failed to create default categories: {str(e)}")
+                # カテゴリ作成失敗は家族作成を妨げない
+            
             # レスポンス作成
             return FamilyResponse(
                 familyId=family_id,
