@@ -13,6 +13,14 @@ import FamilyManageScreen from '../screens/family/FamilyManageScreen';
 import ItemListScreen from '../screens/item/ItemListScreen';
 import CreateEditItemScreen from '../screens/item/CreateEditItemScreen';
 import ItemDetailScreen from '../screens/item/ItemDetailScreen';
+import EventListScreen from '../screens/item/EventListScreen';
+import CreateEditEventScreen from '../screens/item/CreateEditEventScreen';
+import EventDetailScreen from '../screens/item/EventDetailScreen';
+import NeedListScreen from '../screens/item/NeedListScreen';
+import CreateEditNeedScreen from '../screens/item/CreateEditNeedScreen';
+import NeedDetailScreen from '../screens/item/NeedDetailScreen';
+import CategoryListScreen from '../screens/item/CategoryListScreen';
+import CreateEditCategoryScreen from '../screens/item/CreateEditCategoryScreen';
 import { logger } from '../utils/logger';
 
 const Stack = createStackNavigator();
@@ -83,6 +91,20 @@ export default function AppNavigator() {
           <Stack.Screen name="ItemList" component={ItemListScreen} />
           <Stack.Screen name="CreateEditItem" component={CreateEditItemScreen} />
           <Stack.Screen name="ItemDetail" component={ItemDetailScreen} />
+          
+          {/* 予定管理画面 */}
+          <Stack.Screen name="EventList" component={EventListScreen} />
+          <Stack.Screen name="CreateEditEvent" component={CreateEditEventScreen} />
+          <Stack.Screen name="EventDetail" component={EventDetailScreen} />
+          
+          {/* 必要物管理画面 */}
+          <Stack.Screen name="NeedList" component={NeedListScreen} />
+          <Stack.Screen name="CreateEditNeed" component={CreateEditNeedScreen} />
+          <Stack.Screen name="NeedDetail" component={NeedDetailScreen} />
+          
+          {/* カテゴリ管理画面 */}
+          <Stack.Screen name="CategoryList" component={CategoryListScreen} />
+          <Stack.Screen name="CreateEditCategory" component={CreateEditCategoryScreen} />
         </Stack.Navigator>
       )}
     </NavigationContainer>

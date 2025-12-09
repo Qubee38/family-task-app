@@ -19,12 +19,12 @@ import { ItemCreateRequest, ItemUpdateRequest, Priority, Visibility } from '../.
 import { RootStackParamList } from '../../types/navigation.types';
 import { logger } from '../../utils/logger';
 
-type CreateEditItemScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
-type CreateEditItemScreenRouteProp = RouteProp<RootStackParamList, 'CreateEditItem'>;
+type CreateEditNeedScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type CreateEditNeedScreenRouteProp = RouteProp<RootStackParamList, 'CreateEditNeed'>;
 
-export default function CreateEditItemScreen() {
-  const navigation = useNavigation<CreateEditItemScreenNavigationProp>();
-  const route = useRoute<CreateEditItemScreenRouteProp>();
+export default function CreateEditNeedScreen() {
+  const navigation = useNavigation<CreateEditNeedScreenNavigationProp>();
+  const route = useRoute<CreateEditNeedScreenRouteProp>();
   const { selectedFamily } = useFamily();
   const { items, categories, createItem, updateItem, loading } = useItem();
 
@@ -36,26 +36,21 @@ export default function CreateEditItemScreen() {
   // フォーム状態
   const [title, setTitle] = useState(editingItem?.title || '');
   const [selectedCategoryId, setSelectedCategoryId] = useState(editingItem?.categoryId || '');
-  const [priority, setPriority] = useState<Priority>(editingItem?.priority || 'low');
+  const [priority, setPriority] = useState<Priority>(editingItem?.priority || 'medium');
   const [visibility, setVisibility] = useState<Visibility>(editingItem?.visibility || 'family');
   const [location, setLocation] = useState(editingItem?.location || '');
-  const [endDate, setEndDate] = useState(
-    editingItem?.endDateTime 
-      ? new Date(editingItem.endDateTime).toISOString().split('T')[0] 
-      : ''
-  );
 
   // カテゴリ選択モーダル
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
-  // タスク用カテゴリを優先してソート
+  // 必要物用カテゴリを優先してソート
   const sortedCategories = [...categories].sort((a, b) => {
-    // suggestedForに'task'が含まれるものを優先
-    const aHasTask = a.suggestedFor.includes('task');
-    const bHasTask = b.suggestedFor.includes('task');
+    // suggestedForに'need'が含まれるものを優先
+    const aHasNeed = a.suggestedFor.includes('need');
+    const bHasNeed = b.suggestedFor.includes('need');
     
-    if (aHasTask && !bHasTask) return -1;
-    if (!aHasTask && bHasTask) return 1;
+    if (aHasNeed && !bHasNeed) return -1;
+    if (!aHasNeed && bHasNeed) return 1;
     
     // 次にusageCountで降順ソート
     if (b.usageCount !== a.usageCount) {
@@ -73,6 +68,8 @@ export default function CreateEditItemScreen() {
       setSelectedCategoryId(sortedCategories[0].categoryId);
     }
   }, [sortedCategories]);
+
+  const selectedCategory = categories.find(cat => cat.categoryId === selectedCategoryId);
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -104,31 +101,29 @@ export default function CreateEditItemScreen() {
           priority,
           visibility,
           location: location.trim() || undefined,
-          endDateTime: endDate ? new Date(endDate).toISOString() : undefined,
         };
 
         await updateItem(itemId, data);
-        logger.info('タスク更新成功');
+        logger.info('必要物更新成功');
       } else {
         // 作成モード
         const data: ItemCreateRequest = {
-          type: 'task',
+          type: 'need',
           title: title.trim(),
           categoryId: selectedCategoryId,
           priority,
           visibility,
           location: location.trim() || undefined,
-          endDateTime: endDate ? new Date(endDate).toISOString() : undefined,
         };
 
         await createItem(data);
-        logger.info('タスク作成成功');
+        logger.info('必要物作成成功');
       }
       
       navigation.goBack();
     } catch (error: any) {
-      logger.error('タスク保存エラー:', error);
-      const message = error.response?.data?.detail || error.message || 'タスクの保存に失敗しました';
+      logger.error('必要物保存エラー:', error);
+      const message = error.response?.data?.detail || error.message || '必要物の保存に失敗しました';
       if (Platform.OS === 'web') {
         alert(message);
       } else {
@@ -136,8 +131,6 @@ export default function CreateEditItemScreen() {
       }
     }
   };
-
-  const selectedCategory = categories.find(c => c.categoryId === selectedCategoryId);
 
   return (
     <View style={styles.container}>
@@ -150,7 +143,7 @@ export default function CreateEditItemScreen() {
         >
           <Text style={styles.cancelButtonText}>キャンセル</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{isEditMode ? 'タスクを編集' : '新しいタスク'}</Text>
+        <Text style={styles.headerTitle}>{isEditMode ? '必要物を編集' : '新しい必要物'}</Text>
         <TouchableOpacity
           style={styles.saveButton}
           onPress={handleSave}
@@ -158,7 +151,7 @@ export default function CreateEditItemScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator size="small" color="#2196F3" />
+            <ActivityIndicator size="small" color="#FF9800" />
           ) : (
             <Text style={styles.saveButtonText}>保存</Text>
           )}
@@ -168,13 +161,14 @@ export default function CreateEditItemScreen() {
       <ScrollView style={styles.content}>
         {/* タイトル */}
         <View style={styles.section}>
-          <Text style={styles.label}>タイトル *</Text>
+          <Text style={styles.label}>必要物 *</Text>
           <TextInput
             style={styles.input}
+            placeholder="例: 牛乳"
+            placeholderTextColor="#999"
             value={title}
             onChangeText={setTitle}
-            placeholder="例: 庭の草刈り"
-            placeholderTextColor="#999"
+            autoFocus={!isEditMode}
           />
         </View>
 
@@ -205,13 +199,11 @@ export default function CreateEditItemScreen() {
               onPress={() => setPriority('high')}
               activeOpacity={0.7}
             >
-              <Text
-                style={[
-                  styles.priorityButtonText,
-                  priority === 'high' && styles.priorityButtonTextActive,
-                ]}
-              >
-                高
+              <Text style={[
+                styles.priorityButtonText,
+                priority === 'high' && styles.priorityButtonTextActive,
+              ]}>
+                🔴 高
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -222,13 +214,11 @@ export default function CreateEditItemScreen() {
               onPress={() => setPriority('medium')}
               activeOpacity={0.7}
             >
-              <Text
-                style={[
-                  styles.priorityButtonText,
-                  priority === 'medium' && styles.priorityButtonTextActive,
-                ]}
-              >
-                中
+              <Text style={[
+                styles.priorityButtonText,
+                priority === 'medium' && styles.priorityButtonTextActive,
+              ]}>
+                🟡 中
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -239,40 +229,25 @@ export default function CreateEditItemScreen() {
               onPress={() => setPriority('low')}
               activeOpacity={0.7}
             >
-              <Text
-                style={[
-                  styles.priorityButtonText,
-                  priority === 'low' && styles.priorityButtonTextActive,
-                ]}
-              >
-                低
+              <Text style={[
+                styles.priorityButtonText,
+                priority === 'low' && styles.priorityButtonTextActive,
+              ]}>
+                🟢 低
               </Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* 期限 */}
+        {/* 場所（購入場所） */}
         <View style={styles.section}>
-          <Text style={styles.label}>期限</Text>
+          <Text style={styles.label}>購入場所</Text>
           <TextInput
             style={styles.input}
-            value={endDate}
-            onChangeText={setEndDate}
-            placeholder="YYYY-MM-DD"
+            placeholder="例: スーパー"
             placeholderTextColor="#999"
-          />
-          <Text style={styles.hint}>例: 2024-12-31</Text>
-        </View>
-
-        {/* 場所 */}
-        <View style={styles.section}>
-          <Text style={styles.label}>場所</Text>
-          <TextInput
-            style={styles.input}
             value={location}
             onChangeText={setLocation}
-            placeholder="例: 自宅の庭"
-            placeholderTextColor="#999"
           />
         </View>
 
@@ -288,12 +263,10 @@ export default function CreateEditItemScreen() {
               onPress={() => setVisibility('family')}
               activeOpacity={0.7}
             >
-              <Text
-                style={[
-                  styles.visibilityButtonText,
-                  visibility === 'family' && styles.visibilityButtonTextActive,
-                ]}
-              >
+              <Text style={[
+                styles.visibilityButtonText,
+                visibility === 'family' && styles.visibilityButtonTextActive,
+              ]}>
                 👥 家族全体
               </Text>
             </TouchableOpacity>
@@ -305,12 +278,10 @@ export default function CreateEditItemScreen() {
               onPress={() => setVisibility('private')}
               activeOpacity={0.7}
             >
-              <Text
-                style={[
-                  styles.visibilityButtonText,
-                  visibility === 'private' && styles.visibilityButtonTextActive,
-                ]}
-              >
+              <Text style={[
+                styles.visibilityButtonText,
+                visibility === 'private' && styles.visibilityButtonTextActive,
+              ]}>
                 🔒 自分のみ
               </Text>
             </TouchableOpacity>
@@ -407,7 +378,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#2196F3',
+    color: '#FF9800',
   },
   content: {
     flex: 1,
@@ -430,11 +401,6 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: '#333',
-  },
-  hint: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 4,
   },
   picker: {
     backgroundColor: '#fff',
@@ -467,16 +433,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   priorityButtonHigh: {
-    backgroundColor: '#FF3B30',
-    borderColor: '#FF3B30',
+    backgroundColor: '#f44336',
+    borderColor: '#f44336',
   },
   priorityButtonMedium: {
-    backgroundColor: '#FF9500',
-    borderColor: '#FF9500',
+    backgroundColor: '#FF9800',
+    borderColor: '#FF9800',
   },
   priorityButtonLow: {
-    backgroundColor: '#34C759',
-    borderColor: '#34C759',
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
   },
   priorityButtonText: {
     fontSize: 16,
@@ -499,8 +465,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   visibilityButtonActive: {
-    backgroundColor: '#2196F3',
-    borderColor: '#2196F3',
+    backgroundColor: '#FF9800',
+    borderColor: '#FF9800',
   },
   visibilityButtonText: {
     fontSize: 16,
@@ -566,7 +532,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#f0f0f0',
   },
   modalOptionSelected: {
-    backgroundColor: '#f0f8ff',
+    backgroundColor: '#fff3e0',
   },
   modalOptionContent: {
     flex: 1,
@@ -588,7 +554,7 @@ const styles = StyleSheet.create({
   },
   modalOptionCheck: {
     fontSize: 20,
-    color: '#2196F3',
+    color: '#FF9800',
     fontWeight: 'bold',
   },
 });

@@ -18,24 +18,63 @@ export default function HomeScreen() {
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  // 画面表示時にタスクを取得
+  // 画面表示時にタスク、予定、必要物を取得
   useEffect(() => {
     if (selectedFamily) {
       loadItems({ type: 'task', isCompleted: false });
+      loadItems({ type: 'event' });
+      loadItems({ type: 'need', isCompleted: false });
     }
   }, [selectedFamily]);
 
-  // 今日のタスク（期限が今日以前の未完了タスク）
+  // 今日の日付
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // 今日のタスク（期限が今日以前の未完了タスク、最大3件）
   const todayTasks = items
-    .filter(item => !item.isCompleted)
     .filter(item => {
+      if (item.type !== 'task' || item.isCompleted) return false;
       if (!item.endDateTime) return false;
       const endDate = new Date(item.endDateTime);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      endDate.setHours(0, 0, 0, 0);
       return endDate <= today;
     })
+    .sort((a, b) => {
+      if (!a.endDateTime || !b.endDateTime) return 0;
+      return new Date(a.endDateTime).getTime() - new Date(b.endDateTime).getTime();
+    })
     .slice(0, 3);
+
+  // 今日の予定（開始日時が今日、最大3件）
+  const todayEvents = items
+    .filter(item => {
+      if (item.type !== 'event') return false;
+      if (!item.startDateTime) return false;
+      const startDate = new Date(item.startDateTime);
+      startDate.setHours(0, 0, 0, 0);
+      return startDate.getTime() === today.getTime();
+    })
+    .sort((a, b) => {
+      if (!a.startDateTime || !b.startDateTime) return 0;
+      return new Date(a.startDateTime).getTime() - new Date(b.startDateTime).getTime();
+    })
+    .slice(0, 3);
+
+  // 買い物リスト（未購入の必要物、優先度順、最大5件）
+  const shoppingList = items
+    .filter(item => item.type === 'need' && !item.isCompleted)
+    .sort((a, b) => {
+      // 優先度でソート（high > medium > low）
+      const priorityOrder = { high: 3, medium: 2, low: 1 };
+      const aPriority = priorityOrder[a.priority || 'medium'];
+      const bPriority = priorityOrder[b.priority || 'medium'];
+      if (aPriority !== bPriority) return bPriority - aPriority;
+      
+      // 優先度が同じ場合は作成日時でソート（新しい順）
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    })
+    .slice(0, 5);
 
   const handleLogout = async () => {
     console.log('🔹 handleLogout called');
@@ -89,6 +128,9 @@ export default function HomeScreen() {
       case 'manage':
         navigation.navigate('FamilyManage');
         break;
+      case 'categories':
+        navigation.navigate('CategoryList');
+        break;
       case 'switch':
         navigation.navigate('FamilyList');
         break;
@@ -102,8 +144,24 @@ export default function HomeScreen() {
     navigation.navigate('ItemList');
   };
 
+  const handleViewAllEvents = () => {
+    navigation.navigate('EventList');
+  };
+
+  const handleViewAllNeeds = () => {
+    navigation.navigate('NeedList');
+  };
+
   const handleCreateTask = () => {
     navigation.navigate('CreateEditItem');
+  };
+
+  const handleCreateEvent = () => {
+    navigation.navigate('CreateEditEvent');
+  };
+
+  const handleCreateNeed = () => {
+    navigation.navigate('CreateEditNeed');
   };
 
   return (
@@ -172,18 +230,93 @@ export default function HomeScreen() {
 
         {/* 今日の予定 */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>📅 今日の予定</Text>
-          <Text style={styles.placeholderText}>
-            予定管理機能は次のフェーズで実装予定です
-          </Text>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>📅 今日の予定</Text>
+            <TouchableOpacity onPress={handleViewAllEvents} activeOpacity={0.7}>
+              <Text style={styles.viewAllText}>すべて見る →</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {todayEvents.length > 0 ? (
+            todayEvents.map(event => (
+              <TouchableOpacity
+                key={event.itemId}
+                style={styles.taskItem}
+                onPress={() => navigation.navigate('EventDetail', { itemId: event.itemId })}
+                activeOpacity={0.7}
+              >
+                <View style={styles.taskCheckbox} />
+                <View style={styles.taskInfo}>
+                  <Text style={styles.taskTitle}>{event.title}</Text>
+                  <Text style={styles.taskMeta}>
+                    {event.startDateTime && `⏰ ${new Date(event.startDateTime).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`}
+                    {event.categoryName && ` • 🏷️ ${event.categoryName}`}
+                    {event.location && ` • 📍 ${event.location}`}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>今日の予定はありません</Text>
+          )}
+
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={handleCreateEvent}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.addButtonText}>+ 新しい予定を作成</Text>
+          </TouchableOpacity>
         </View>
 
         {/* 買い物リスト */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>🛒 買い物リスト</Text>
-          <Text style={styles.placeholderText}>
-            必要物管理機能は次のフェーズで実装予定です
-          </Text>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>🛒 買い物リスト</Text>
+            <TouchableOpacity onPress={handleViewAllNeeds} activeOpacity={0.7}>
+              <Text style={styles.viewAllText}>すべて見る →</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {shoppingList.length > 0 ? (
+            shoppingList.map(need => {
+              const priorityEmoji = {
+                high: '🔴',
+                medium: '🟡',
+                low: '🟢',
+              }[need.priority || 'medium'];
+              
+              return (
+                <TouchableOpacity
+                  key={need.itemId}
+                  style={styles.taskItem}
+                  onPress={() => navigation.navigate('NeedDetail', { itemId: need.itemId })}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.taskCheckbox} />
+                  <View style={styles.taskInfo}>
+                    <Text style={styles.taskTitle}>
+                      {priorityEmoji} {need.title}
+                    </Text>
+                    <Text style={styles.taskMeta}>
+                      {need.categoryName && `🏷️ ${need.categoryName}`}
+                      {need.location && ` • 📍 ${need.location}`}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <Text style={styles.emptyText}>買い物リストは空です</Text>
+          )}
+
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={handleCreateNeed}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.addButtonText}>+ 新しい必要物を追加</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -223,6 +356,15 @@ export default function HomeScreen() {
             >
               <Text style={styles.menuItemIcon}>⚙️</Text>
               <Text style={styles.menuItemText}>家族を管理</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => handleMenuAction('categories')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.menuItemIcon}>🏷️</Text>
+              <Text style={styles.menuItemText}>カテゴリ管理</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

@@ -81,6 +81,12 @@ export interface CategoryCreateRequest {
   points?: number;
 }
 
+export interface CategoryUpdateRequest {
+  name?: string;
+  suggestedFor?: ItemType[];
+  points?: number;
+}
+
 export interface CategoryResponse {
   categoryId: string;
   familyId: string;

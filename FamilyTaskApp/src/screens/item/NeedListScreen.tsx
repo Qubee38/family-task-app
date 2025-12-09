@@ -16,14 +16,14 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useItem } from '../../contexts/ItemContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFamily } from '../../contexts/FamilyContext';
-import { ItemResponse } from '../../types/item';
+import { ItemResponse, Priority } from '../../types/item';
 import { RootStackParamList } from '../../types/navigation.types';
 import { logger } from '../../utils/logger';
 
-type EventListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type NeedListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-export default function EventListScreen() {
-  const navigation = useNavigation<EventListScreenNavigationProp>();
+export default function NeedListScreen() {
+  const navigation = useNavigation<NeedListScreenNavigationProp>();
   const { user } = useAuth();
   const { selectedFamily } = useFamily();
   const { items, categories, loading, loadItems, completeItem, uncompleteItem } = useItem();
@@ -32,46 +32,42 @@ export default function EventListScreen() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('active');
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [selectedAssignee, setSelectedAssignee] = useState<string>('');
+  const [priorityFilter, setPriorityFilter] = useState<Priority | ''>('');
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
 
   useEffect(() => {
-    // 画面表示時に予定を取得
-    const filter: any = { type: 'event' };
+    // 画面表示時に必要物を取得
+    const filter: any = { type: 'need' };
     
     if (statusFilter === 'completed') filter.isCompleted = true;
     if (statusFilter === 'active') filter.isCompleted = false;
     if (selectedCategoryId) filter.categoryId = selectedCategoryId;
     if (selectedAssignee) filter.assignedTo = selectedAssignee;
     
-    logger.info('📅 EventListScreen: 予定を取得', filter);
+    logger.info('🛒 NeedListScreen: 必要物を取得', filter);
     loadItems(filter);
   }, [statusFilter, selectedCategoryId, selectedAssignee]);
 
-  useEffect(() => {
-    logger.info('📅 EventListScreen: items更新', { count: items.length, items: items.map(i => ({ id: i.itemId, type: i.type, title: i.title })) });
-  }, [items]);
-
-  const handleEventPress = (item: ItemResponse) => {
-    navigation.navigate('EventDetail', { itemId: item.itemId });
+  const handleNeedPress = (item: ItemResponse) => {
+    navigation.navigate('NeedDetail', { itemId: item.itemId });
   };
 
-  const handleCreateEvent = () => {
-    navigation.navigate('CreateEditEvent');
+  const handleCreateNeed = () => {
+    navigation.navigate('CreateEditNeed');
   };
 
   const handleToggleComplete = async (item: ItemResponse) => {
     try {
       if (item.isCompleted) {
         await uncompleteItem(item.itemId);
-        logger.info('予定を未完了に戻しました');
+        logger.info('必要物を未購入に戻しました');
       } else {
         await completeItem(item.itemId);
-        logger.info('予定を完了にしました');
+        logger.info('必要物を購入済みにしました');
       }
     } catch (error: any) {
-      logger.error('予定の完了切替エラー:', error);
-      const message = error.response?.data?.detail || error.message || '予定の更新に失敗しました';
+      logger.error('必要物の完了切替エラー:', error);
+      const message = error.response?.data?.detail || error.message || '必要物の更新に失敗しました';
       if (Platform.OS === 'web') {
         alert(message);
       } else {
@@ -83,17 +79,20 @@ export default function EventListScreen() {
   const clearFilters = () => {
     setSelectedCategoryId('');
     setSelectedAssignee('');
+    setPriorityFilter('');
   };
 
   const activeFilterCount = 
     (selectedCategoryId ? 1 : 0) + 
-    (selectedAssignee ? 1 : 0);
+    (selectedAssignee ? 1 : 0) + 
+    (priorityFilter ? 1 : 0);
 
-  // フィルター適用（予定のみ）
+  // フィルター適用（必要物のみ）
   const filteredItems = items
-    .filter(item => item.type === 'event')  // 予定のみ
+    .filter(item => item.type === 'need')  // 必要物のみ
     .filter(item => {
-      // 優先度フィルター（予定には優先度はないが、念のため）
+      // 優先度フィルター（クライアント側で適用）
+      if (priorityFilter && item.priority !== priorityFilter) return false;
       return true;
     });
 
@@ -101,33 +100,19 @@ export default function EventListScreen() {
   const familyMembers = selectedFamily?.members || [];
 
   const renderItem = ({ item }: { item: ItemResponse }) => {
-    // 開始日時のフォーマット
-    const startDate = item.startDateTime 
-      ? new Date(item.startDateTime).toLocaleString('ja-JP', {
-          month: 'numeric',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : '';
-
-    // 繰り返し設定の表示
-    const recurrenceText = item.recurrence 
-      ? ` 🔄 ${
-          item.recurrence.frequency === 'daily' ? '毎日' :
-          item.recurrence.frequency === 'weekly' ? '毎週' :
-          item.recurrence.frequency === 'monthly' ? '毎月' :
-          '毎年'
-        }`
-      : '';
+    const priorityEmoji = {
+      high: '🔴',
+      medium: '🟡',
+      low: '🟢',
+    }[item.priority || 'medium'];
 
     return (
       <TouchableOpacity
-        style={[styles.eventCard, item.isCompleted && styles.eventCardCompleted]}
-        onPress={() => handleEventPress(item)}
+        style={[styles.needCard, item.isCompleted && styles.needCardCompleted]}
+        onPress={() => handleNeedPress(item)}
         activeOpacity={0.7}
       >
-        <View style={styles.eventLeft}>
+        <View style={styles.needLeft}>
           <TouchableOpacity
             style={[styles.checkbox, item.isCompleted && styles.checkboxCompleted]}
             onPress={() => handleToggleComplete(item)}
@@ -136,22 +121,22 @@ export default function EventListScreen() {
             {item.isCompleted && <Text style={styles.checkboxCheck}>✓</Text>}
           </TouchableOpacity>
           
-          <View style={styles.eventInfo}>
-            <Text style={[styles.eventTitle, item.isCompleted && styles.eventTitleCompleted]}>
-              {item.title}
-            </Text>
-            <View style={styles.eventMeta}>
+          <View style={styles.needInfo}>
+            <View style={styles.needTitleRow}>
+              <Text style={styles.priorityEmoji}>{priorityEmoji}</Text>
+              <Text style={[styles.needTitle, item.isCompleted && styles.needTitleCompleted]}>
+                {item.title}
+              </Text>
+            </View>
+            <View style={styles.needMeta}>
               {item.categoryName && (
-                <Text style={styles.eventCategory}>🏷️ {item.categoryName}</Text>
+                <Text style={styles.needCategory}>🏷️ {item.categoryName}</Text>
               )}
               {item.assignedToName && (
-                <Text style={styles.eventAssignee}>👤 {item.assignedToName}</Text>
-              )}
-              {startDate && (
-                <Text style={styles.eventDateTime}>📅 {startDate}{recurrenceText}</Text>
+                <Text style={styles.needAssignee}>👤 {item.assignedToName}</Text>
               )}
               {item.location && (
-                <Text style={styles.eventLocation}>📍 {item.location}</Text>
+                <Text style={styles.needLocation}>📍 {item.location}</Text>
               )}
             </View>
           </View>
@@ -171,35 +156,13 @@ export default function EventListScreen() {
         >
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>予定一覧</Text>
+        <Text style={styles.headerTitle}>買い物リスト</Text>
         <TouchableOpacity
           style={styles.addButton}
-          onPress={handleCreateEvent}
+          onPress={handleCreateNeed}
           activeOpacity={0.7}
         >
           <Text style={styles.addButtonText}>+</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* 表示切替ボタン */}
-      <View style={styles.viewModeContainer}>
-        <TouchableOpacity
-          style={[styles.viewModeButton, viewMode === 'list' && styles.viewModeButtonActive]}
-          onPress={() => setViewMode('list')}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.viewModeText, viewMode === 'list' && styles.viewModeTextActive]}>
-            📋 リスト
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.viewModeButton, viewMode === 'calendar' && styles.viewModeButtonActive]}
-          onPress={() => setViewMode('calendar')}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.viewModeText, viewMode === 'calendar' && styles.viewModeTextActive]}>
-            📅 カレンダー
-          </Text>
         </TouchableOpacity>
       </View>
 
@@ -221,7 +184,7 @@ export default function EventListScreen() {
             activeOpacity={0.7}
           >
             <Text style={[styles.filterButtonText, statusFilter === 'active' && styles.filterButtonTextActive]}>
-              未完了
+              未購入
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -230,7 +193,7 @@ export default function EventListScreen() {
             activeOpacity={0.7}
           >
             <Text style={[styles.filterButtonText, statusFilter === 'completed' && styles.filterButtonTextActive]}>
-              完了
+              購入済み
             </Text>
           </TouchableOpacity>
         </View>
@@ -247,23 +210,15 @@ export default function EventListScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* 予定一覧 */}
-      {viewMode === 'calendar' ? (
-        <View style={styles.calendarPlaceholder}>
-          <Text style={styles.placeholderText}>📅</Text>
-          <Text style={styles.placeholderTitle}>カレンダービュー</Text>
-          <Text style={styles.placeholderSubtext}>
-            カレンダー表示機能は今後実装予定です
-          </Text>
-        </View>
-      ) : loading ? (
+      {/* 必要物一覧 */}
+      {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2196F3" />
+          <ActivityIndicator size="large" color="#FF9800" />
         </View>
       ) : filteredItems.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>予定がありません</Text>
-          <Text style={styles.emptySubtext}>右上の「+」ボタンから作成できます</Text>
+          <Text style={styles.emptyText}>必要物がありません</Text>
+          <Text style={styles.emptySubtext}>右上の「+」ボタンから追加できます</Text>
         </View>
       ) : (
         <FlatList
@@ -309,7 +264,7 @@ export default function EventListScreen() {
                     <Text style={styles.filterOptionText}>すべて</Text>
                   </TouchableOpacity>
                   {categories
-                    .filter(cat => cat.suggestedFor.includes('event'))
+                    .filter(cat => cat.suggestedFor.includes('need'))
                     .map(category => (
                       <TouchableOpacity
                         key={category.categoryId}
@@ -355,6 +310,53 @@ export default function EventListScreen() {
                   ))}
                 </View>
               </View>
+
+              {/* 優先度フィルター */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>優先度</Text>
+                <View style={styles.filterOptions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.filterOption,
+                      !priorityFilter && styles.filterOptionActive,
+                    ]}
+                    onPress={() => setPriorityFilter('')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.filterOptionText}>すべて</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.filterOption,
+                      priorityFilter === 'high' && styles.filterOptionActive,
+                    ]}
+                    onPress={() => setPriorityFilter('high')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.filterOptionText}>🔴 高</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.filterOption,
+                      priorityFilter === 'medium' && styles.filterOptionActive,
+                    ]}
+                    onPress={() => setPriorityFilter('medium')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.filterOptionText}>🟡 中</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.filterOption,
+                      priorityFilter === 'low' && styles.filterOptionActive,
+                    ]}
+                    onPress={() => setPriorityFilter('low')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.filterOptionText}>🟢 低</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -386,7 +388,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FF9800',
     paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
@@ -423,30 +425,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
-  viewModeContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    backgroundColor: '#fff',
-    gap: 8,
-  },
-  viewModeButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#f5f5f5',
-    alignItems: 'center',
-  },
-  viewModeButtonActive: {
-    backgroundColor: '#4CAF50',
-  },
-  viewModeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  viewModeTextActive: {
-    color: '#fff',
-  },
   filterContainer: {
     padding: 16,
     backgroundColor: '#fff',
@@ -467,7 +445,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterButtonActive: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FF9800',
   },
   filterButtonText: {
     fontSize: 14,
@@ -490,31 +468,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#666',
   },
-  calendarPlaceholder: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  placeholderText: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  placeholderTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  placeholderSubtext: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-  },
   listContent: {
     padding: 16,
   },
-  eventCard: {
+  needCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
@@ -527,10 +484,10 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  eventCardCompleted: {
+  needCardCompleted: {
     opacity: 0.6,
   },
-  eventLeft: {
+  needLeft: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
@@ -546,44 +503,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checkboxCompleted: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
+    backgroundColor: '#FF9800',
+    borderColor: '#FF9800',
   },
   checkboxCheck: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  eventInfo: {
+  needInfo: {
     flex: 1,
   },
-  eventTitle: {
+  needTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  priorityEmoji: {
+    fontSize: 12,
+    marginRight: 6,
+  },
+  needTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 4,
+    flex: 1,
   },
-  eventTitleCompleted: {
+  needTitleCompleted: {
     textDecorationLine: 'line-through',
     color: '#999',
   },
-  eventMeta: {
-    flexDirection: 'column',
-    gap: 4,
+  needMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  eventCategory: {
+  needCategory: {
     fontSize: 12,
     color: '#666',
   },
-  eventAssignee: {
+  needAssignee: {
     fontSize: 12,
     color: '#666',
   },
-  eventDateTime: {
-    fontSize: 12,
-    color: '#666',
-  },
-  eventLocation: {
+  needLocation: {
     fontSize: 12,
     color: '#666',
   },
@@ -671,8 +634,8 @@ const styles = StyleSheet.create({
     borderColor: '#e0e0e0',
   },
   filterOptionActive: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
+    backgroundColor: '#FF9800',
+    borderColor: '#FF9800',
   },
   filterOptionText: {
     fontSize: 14,
@@ -701,7 +664,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 8,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FF9800',
     alignItems: 'center',
   },
   applyButtonText: {

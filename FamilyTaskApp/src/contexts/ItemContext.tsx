@@ -77,12 +77,23 @@ export const ItemProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     try {
       setLoading(true);
-      logger.debug('アイテム一覧取得開始');
+      logger.debug('アイテム一覧取得開始', filter);
       
       const result = await apiGetItems(selectedFamily.familyId, filter);
-      setItems(result.items);
       
-      logger.info('アイテム一覧取得成功:', result.items.length);
+      // フィルターにtypeが指定されている場合は、そのtypeのアイテムのみ更新
+      if (filter?.type) {
+        setItems(prevItems => {
+          // 他のtypeのアイテムは保持し、指定されたtypeのアイテムのみ更新
+          const otherTypeItems = prevItems.filter(item => item.type !== filter.type);
+          return [...otherTypeItems, ...result.items];
+        });
+      } else {
+        // typeフィルターがない場合は全て置き換え
+        setItems(result.items);
+      }
+      
+      logger.info('アイテム一覧取得成功:', { type: filter?.type, count: result.items.length });
     } catch (error) {
       logger.error('アイテム一覧取得エラー:', error);
       throw error;

@@ -32,6 +32,20 @@ export type RootStackParamList = {
   ItemList: undefined;
   CreateEditItem: { itemId?: string } | undefined;  // 編集時はitemIdを渡す
   ItemDetail: { itemId: string };
+  
+  // 予定管理画面
+  EventList: undefined;
+  CreateEditEvent: { itemId?: string } | undefined;  // 編集時はitemIdを渡す
+  EventDetail: { itemId: string };
+  
+  // 必要物管理画面
+  NeedList: undefined;
+  CreateEditNeed: { itemId?: string } | undefined;  // 編集時はitemIdを渡す
+  NeedDetail: { itemId: string };
+  
+  // カテゴリ管理画面
+  CategoryList: undefined;
+  CreateEditCategory: { categoryId?: string } | undefined;  // 編集時はcategoryIdを渡す
 };
 
 // ============================================

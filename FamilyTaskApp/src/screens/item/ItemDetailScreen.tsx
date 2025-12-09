@@ -61,6 +61,10 @@ export default function ItemDetailScreen() {
     }
   };
 
+  const handleEdit = () => {
+    navigation.navigate('CreateEditItem', { itemId: item.itemId });
+  };
+
   const handleDelete = async () => {
     if (!item) return;
 
@@ -126,13 +130,22 @@ export default function ItemDetailScreen() {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>タスク詳細</Text>
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={confirmDelete}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.deleteButtonText}>🗑️</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={handleEdit}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.editButtonText}>✏️</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={confirmDelete}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.deleteButtonText}>🗑️</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content}>
@@ -303,6 +316,19 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  headerRight: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editButtonText: {
+    fontSize: 24,
   },
   deleteButton: {
     width: 40,
