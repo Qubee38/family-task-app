@@ -10,6 +10,9 @@ import FamilyListScreen from '../screens/family/FamilyListScreen';
 import CreateFamilyScreen from '../screens/family/CreateFamilyScreen';
 import JoinFamilyScreen from '../screens/family/JoinFamilyScreen';
 import FamilyManageScreen from '../screens/family/FamilyManageScreen';
+import ItemListScreen from '../screens/item/ItemListScreen';
+import CreateEditItemScreen from '../screens/item/CreateEditItemScreen';
+import ItemDetailScreen from '../screens/item/ItemDetailScreen';
 import { logger } from '../utils/logger';
 
 const Stack = createStackNavigator();
@@ -75,6 +78,11 @@ export default function AppNavigator() {
           {/* 家族選択後の画面 */}
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="FamilyManage" component={FamilyManageScreen} />
+          
+          {/* アイテム管理画面 */}
+          <Stack.Screen name="ItemList" component={ItemListScreen} />
+          <Stack.Screen name="CreateEditItem" component={CreateEditItemScreen} />
+          <Stack.Screen name="ItemDetail" component={ItemDetailScreen} />
         </Stack.Navigator>
       )}
     </NavigationContainer>

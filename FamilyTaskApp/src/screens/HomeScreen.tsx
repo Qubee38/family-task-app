@@ -1,16 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, ScrollView, Modal } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
 import { useFamily } from '../contexts/FamilyContext';
+import { useItem } from '../contexts/ItemContext';
+import { RootStackParamList } from '../types/navigation.types';
 import ConfirmDialog from '../components/ConfirmDialog';
 
+type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
 export default function HomeScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<HomeScreenNavigationProp>();
   const { user, signOut } = useAuth();
   const { selectedFamily } = useFamily();
+  const { items, loadItems } = useItem();
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // 画面表示時にタスクを取得
+  useEffect(() => {
+    if (selectedFamily) {
+      loadItems({ type: 'task', isCompleted: false });
+    }
+  }, [selectedFamily]);
+
+  // 今日のタスク（期限が今日以前の未完了タスク）
+  const todayTasks = items
+    .filter(item => !item.isCompleted)
+    .filter(item => {
+      if (!item.endDateTime) return false;
+      const endDate = new Date(item.endDateTime);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return endDate <= today;
+    })
+    .slice(0, 3);
 
   const handleLogout = async () => {
     console.log('🔹 handleLogout called');
@@ -62,15 +87,23 @@ export default function HomeScreen() {
     
     switch (action) {
       case 'manage':
-        navigation.navigate('FamilyManage' as never);
+        navigation.navigate('FamilyManage');
         break;
       case 'switch':
-        navigation.navigate('FamilyList' as never);
+        navigation.navigate('FamilyList');
         break;
       case 'logout':
         handleLogout();
         break;
     }
+  };
+
+  const handleViewAllTasks = () => {
+    navigation.navigate('ItemList');
+  };
+
+  const handleCreateTask = () => {
+    navigation.navigate('CreateEditItem');
   };
 
   return (
@@ -97,23 +130,57 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* プレースホルダー（将来のタスク表示エリア） */}
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderTitle}>📋 今日のタスク</Text>
-          <Text style={styles.placeholderText}>
-            タスク管理機能は次のフェーズで実装予定です
-          </Text>
+        {/* 今日のタスク */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>📋 今日のタスク</Text>
+            <TouchableOpacity onPress={handleViewAllTasks} activeOpacity={0.7}>
+              <Text style={styles.viewAllText}>すべて見る →</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {todayTasks.length > 0 ? (
+            todayTasks.map(task => (
+              <TouchableOpacity
+                key={task.itemId}
+                style={styles.taskItem}
+                onPress={() => navigation.navigate('ItemDetail', { itemId: task.itemId })}
+                activeOpacity={0.7}
+              >
+                <View style={styles.taskCheckbox} />
+                <View style={styles.taskInfo}>
+                  <Text style={styles.taskTitle}>{task.title}</Text>
+                  <Text style={styles.taskMeta}>
+                    {task.categoryName && `🏷️ ${task.categoryName}`}
+                    {task.assignedToName && ` • 👤 ${task.assignedToName}`}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>期限が近いタスクはありません</Text>
+          )}
+          
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={handleCreateTask}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.addButtonText}>+ 新しいタスクを作成</Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderTitle}>📅 今日の予定</Text>
+        {/* 今日の予定 */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>📅 今日の予定</Text>
           <Text style={styles.placeholderText}>
             予定管理機能は次のフェーズで実装予定です
           </Text>
         </View>
 
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderTitle}>🛒 買い物リスト</Text>
+        {/* 買い物リスト */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>🛒 買い物リスト</Text>
           <Text style={styles.placeholderText}>
             必要物管理機能は次のフェーズで実装予定です
           </Text>
@@ -247,7 +314,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
-  placeholderCard: {
+  card: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 20,
@@ -257,13 +324,71 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
-    alignItems: 'center',
   },
-  placeholderTitle: {
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 8,
+    marginBottom: 12,
+  },
+  viewAllText: {
+    fontSize: 14,
+    color: '#2196F3',
+    fontWeight: '600',
+  },
+  taskItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  taskCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#ccc',
+    marginRight: 12,
+  },
+  taskInfo: {
+    flex: 1,
+  },
+  taskTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  taskMeta: {
+    fontSize: 12,
+    color: '#666',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  addButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#2196F3',
+    borderStyle: 'dashed',
+    alignItems: 'center',
+  },
+  addButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2196F3',
   },
   placeholderText: {
     fontSize: 14,
