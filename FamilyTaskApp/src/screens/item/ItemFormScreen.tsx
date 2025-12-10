@@ -14,6 +14,7 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useItem } from '../../contexts/ItemContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { useFamily } from '../../contexts/FamilyContext';
 import { 
   ItemCreateRequest, 
@@ -32,6 +33,7 @@ type ItemFormScreenRouteProp = RouteProp<RootStackParamList, 'ItemForm'>;
 export default function ItemFormScreen() {
   const navigation = useNavigation<ItemFormScreenNavigationProp>();
   const route = useRoute<ItemFormScreenRouteProp>();
+  const { user } = useAuth();
   const { selectedFamily } = useFamily();
   const { items, categories, createItem, updateItem, loading } = useItem();
 
@@ -51,6 +53,11 @@ export default function ItemFormScreen() {
   const [selectedCategoryId, setSelectedCategoryId] = useState(editingItem?.categoryId || '');
   const [isPrivate, setIsPrivate] = useState(editingItem?.visibility === 'private');
   const [location, setLocation] = useState(editingItem?.location || '');
+  
+  // 担当者選択（新規作成時はデフォルトで現在のユーザー）
+  const [assignedTo, setAssignedTo] = useState<string>(
+    editingItem?.assignedTo || user?.uid || ''
+  );
 
   // タスク・欲しい物・予定用フィールド
   const [priority, setPriority] = useState<Priority>(editingItem?.priority || 'medium');
@@ -91,13 +98,19 @@ export default function ItemFormScreen() {
     editingItem?.recurrence?.interval?.toString() || '1'
   );
 
-  // カテゴリ選択モーダル
+  // モーダル状態
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
-  
-  // 日付選択モーダル
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerType, setDatePickerType] = useState<'start' | 'end' | 'endEvent'>('start');
   const [tempDate, setTempDate] = useState('');
+
+  // デフォルト担当者を現在のユーザーに設定（新規作成時のみ）
+  useEffect(() => {
+    if (!isEditMode && user?.uid && !assignedTo) {
+      setAssignedTo(user.uid);
+    }
+  }, [user, isEditMode, assignedTo]);
 
   // タイプごとのカテゴリソート
   const sortedCategories = [...categories].sort((a, b) => {
@@ -122,6 +135,10 @@ export default function ItemFormScreen() {
   }, [sortedCategories, itemType]);
 
   const selectedCategory = categories.find(cat => cat.categoryId === selectedCategoryId);
+
+  // 家族メンバー一覧
+  const familyMembers = selectedFamily?.members || [];
+  const selectedMember = familyMembers.find(m => m.userId === assignedTo);
 
   // タイプ変更時の処理
   const handleTypeChange = (type: ItemType) => {
@@ -203,6 +220,16 @@ export default function ItemFormScreen() {
       return;
     }
 
+    if (!assignedTo) {
+      const message = '担当者を選択してください';
+      if (Platform.OS === 'web') {
+        alert(message);
+      } else {
+        Alert.alert('エラー', message);
+      }
+      return;
+    }
+
     // タイプ別バリデーション
     if (itemType === 'event') {
       if (!startDate || !startTime) {
@@ -220,6 +247,7 @@ export default function ItemFormScreen() {
       const commonData = {
         title: title.trim(),
         categoryId: selectedCategoryId,
+        assignedTo: assignedTo, // 担当者を追加
         visibility: (isPrivate ? 'private' : 'family') as Visibility,
         location: location.trim() || undefined,
       };
@@ -331,8 +359,8 @@ export default function ItemFormScreen() {
         <TouchableOpacity
           style={styles.saveButton}
           onPress={handleSave}
-          activeOpacity={0.7}
           disabled={loading}
+          activeOpacity={0.7}
         >
           {loading ? (
             <ActivityIndicator size="small" color="#fff" />
@@ -342,11 +370,11 @@ export default function ItemFormScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* タイプ選択（新規作成時のみ） */}
         {!isEditMode && (
           <View style={styles.section}>
-            <Text style={styles.label}>種類 *</Text>
+            <Text style={styles.label}>種類</Text>
             <View style={styles.typeContainer}>
               {(['task', 'event', 'need'] as ItemType[]).map((type) => (
                 <TouchableOpacity
@@ -358,18 +386,12 @@ export default function ItemFormScreen() {
                   onPress={() => handleTypeChange(type)}
                   activeOpacity={0.7}
                 >
-                  <View style={[
-                    styles.typeIndicator,
-                    itemType === type && (
-                      type === 'task' ? styles.typeIndicatorTask :
-                      type === 'event' ? styles.typeIndicatorEvent :
-                      styles.typeIndicatorNeed
-                    )
-                  ]} />
-                  <Text style={[
-                    styles.typeButtonText,
-                    itemType === type && styles.typeButtonTextActive,
-                  ]}>
+                  <Text
+                    style={[
+                      styles.typeButtonText,
+                      itemType === type && styles.typeButtonTextActive,
+                    ]}
+                  >
                     {typeLabels[type]}
                   </Text>
                 </TouchableOpacity>
@@ -380,20 +402,17 @@ export default function ItemFormScreen() {
 
         {/* タイトル */}
         <View style={styles.section}>
-          <Text style={styles.label}>
-            {itemType === 'need' ? '欲しい物' : 'タイトル'} *
-          </Text>
+          <Text style={styles.label}>タイトル *</Text>
           <TextInput
             style={styles.input}
             placeholder={
-              itemType === 'task' ? '例: 庭の手入れ' :
-              itemType === 'event' ? '例: 歯医者の予約' :
-              '例: 牛乳'
+              itemType === 'task' ? 'タスクのタイトル' :
+              itemType === 'event' ? '予定のタイトル' :
+              '欲しい物の名前'
             }
-            placeholderTextColor="#999"
             value={title}
             onChangeText={setTitle}
-            autoFocus={!isEditMode}
+            placeholderTextColor="#999"
           />
         </View>
 
@@ -401,18 +420,36 @@ export default function ItemFormScreen() {
         <View style={styles.section}>
           <Text style={styles.label}>カテゴリ *</Text>
           <TouchableOpacity
-            style={styles.picker}
+            style={styles.selectButton}
             onPress={() => setShowCategoryPicker(true)}
             activeOpacity={0.7}
           >
-            <Text style={styles.pickerText}>
-              {selectedCategory ? selectedCategory.name : 'カテゴリを選択'}
+            <Text style={styles.selectButtonText}>
+              {selectedCategory?.name || 'カテゴリを選択'}
             </Text>
-            <Text style={styles.pickerArrow}>▼</Text>
+            <Text style={styles.selectButtonArrow}>▼</Text>
           </TouchableOpacity>
         </View>
 
-        {/* 優先度（すべてのタイプ） */}
+        {/* 担当者 */}
+        <View style={styles.section}>
+          <Text style={styles.label}>担当者 *</Text>
+          <TouchableOpacity
+            style={styles.selectButton}
+            onPress={() => setShowAssigneePicker(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.selectButtonText}>
+              {selectedMember?.displayName || '担当者を選択'}
+            </Text>
+            <Text style={styles.selectButtonArrow}>▼</Text>
+          </TouchableOpacity>
+          <Text style={styles.hint}>
+            自分または他の家族メンバーを担当者に設定できます
+          </Text>
+        </View>
+
+        {/* 優先度 */}
         <View style={styles.section}>
           <Text style={styles.label}>優先度</Text>
           <View style={styles.priorityContainer}>
@@ -424,13 +461,16 @@ export default function ItemFormScreen() {
               onPress={() => setPriority('high')}
               activeOpacity={0.7}
             >
-              <Text style={[
-                styles.priorityButtonText,
-                priority === 'high' && styles.priorityButtonTextActive,
-              ]}>
+              <Text
+                style={[
+                  styles.priorityButtonText,
+                  priority === 'high' && styles.priorityButtonTextActive,
+                ]}
+              >
                 🔴 高
               </Text>
             </TouchableOpacity>
+            
             <TouchableOpacity
               style={[
                 styles.priorityButton,
@@ -439,13 +479,16 @@ export default function ItemFormScreen() {
               onPress={() => setPriority('medium')}
               activeOpacity={0.7}
             >
-              <Text style={[
-                styles.priorityButtonText,
-                priority === 'medium' && styles.priorityButtonTextActive,
-              ]}>
+              <Text
+                style={[
+                  styles.priorityButtonText,
+                  priority === 'medium' && styles.priorityButtonTextActive,
+                ]}
+              >
                 🟡 中
               </Text>
             </TouchableOpacity>
+            
             <TouchableOpacity
               style={[
                 styles.priorityButton,
@@ -454,63 +497,20 @@ export default function ItemFormScreen() {
               onPress={() => setPriority('low')}
               activeOpacity={0.7}
             >
-              <Text style={[
-                styles.priorityButtonText,
-                priority === 'low' && styles.priorityButtonTextActive,
-              ]}>
+              <Text
+                style={[
+                  styles.priorityButtonText,
+                  priority === 'low' && styles.priorityButtonTextActive,
+                ]}
+              >
                 🟢 低
               </Text>
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* 開始日時（予定のみ） */}
-        {itemType === 'event' && (
-          <View style={styles.section}>
-            <Text style={styles.label}>開始日時 *</Text>
-            <View style={styles.dateTimeRow}>
-              <TouchableOpacity
-                style={[styles.input, styles.dateInput]}
-                onPress={() => openDatePicker('start')}
-                activeOpacity={0.7}
-              >
-                <Text style={startDate ? styles.dateText : styles.dateTextPlaceholder}>
-                  {startDate || '日付を選択'}
-                </Text>
-              </TouchableOpacity>
-              <TextInput
-                style={[styles.input, styles.timeInput]}
-                placeholder="HH:MM"
-                placeholderTextColor="#999"
-                value={startTime}
-                onChangeText={setStartTime}
-              />
-            </View>
-            
-            <Text style={styles.label}>終了日時</Text>
-            <View style={styles.dateTimeRow}>
-              <TouchableOpacity
-                style={[styles.input, styles.dateInput]}
-                onPress={() => openDatePicker('endEvent')}
-                activeOpacity={0.7}
-              >
-                <Text style={endDateEvent ? styles.dateText : styles.dateTextPlaceholder}>
-                  {endDateEvent || '日付を選択'}
-                </Text>
-              </TouchableOpacity>
-              <TextInput
-                style={[styles.input, styles.timeInput]}
-                placeholder="HH:MM"
-                placeholderTextColor="#999"
-                value={endTime}
-                onChangeText={setEndTime}
-              />
-            </View>
-          </View>
-        )}
-
-        {/* 期限（タスク・欲しい物） */}
-        {(itemType === 'task' || itemType === 'need') && (
+        {/* タスク用: 期限 */}
+        {itemType === 'task' && (
           <View style={styles.section}>
             <Text style={styles.label}>期限</Text>
             <TouchableOpacity
@@ -519,68 +519,151 @@ export default function ItemFormScreen() {
               activeOpacity={0.7}
             >
               <Text style={endDate ? styles.dateText : styles.dateTextPlaceholder}>
-                {endDate || '日付を選択'}
+                {endDate ? new Date(endDate).toLocaleDateString('ja-JP', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'short'
+                }) : '日付を選択'}
               </Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* 繰り返し設定（予定のみ） */}
+        {/* 予定用: 開始日時・終了日時 */}
         {itemType === 'event' && (
-          <View style={styles.section}>
-            <View style={styles.switchRow}>
-              <Text style={styles.label}>繰り返し設定</Text>
-              <TouchableOpacity
-                style={[styles.switch, hasRecurrence && styles.switchActive]}
-                onPress={() => setHasRecurrence(!hasRecurrence)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.switchThumb, hasRecurrence && styles.switchThumbActive]} />
-              </TouchableOpacity>
-            </View>
-            
-            {hasRecurrence && (
-              <>
-                <View style={styles.recurrenceRow}>
-                  {['daily', 'weekly', 'monthly', 'yearly'].map((freq) => (
-                    <TouchableOpacity
-                      key={freq}
-                      style={[
-                        styles.recurrenceButton,
-                        recurrenceFrequency === freq && styles.recurrenceButtonActive
-                      ]}
-                      onPress={() => setRecurrenceFrequency(freq as any)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[
-                        styles.recurrenceButtonText,
-                        recurrenceFrequency === freq && styles.recurrenceButtonTextActive
-                      ]}>
-                        {freq === 'daily' ? '毎日' : freq === 'weekly' ? '毎週' : freq === 'monthly' ? '毎月' : '毎年'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                
-                <View style={styles.intervalRow}>
-                  <Text style={styles.intervalLabel}>間隔:</Text>
-                  <TextInput
-                    style={styles.intervalInput}
-                    placeholder="1"
-                    placeholderTextColor="#999"
-                    value={recurrenceInterval}
-                    onChangeText={setRecurrenceInterval}
-                    keyboardType="number-pad"
-                  />
-                  <Text style={styles.intervalUnit}>
-                    {recurrenceFrequency === 'daily' ? '日ごと' :
-                     recurrenceFrequency === 'weekly' ? '週ごと' :
-                     recurrenceFrequency === 'monthly' ? 'ヶ月ごと' :
-                     '年ごと'}
+          <>
+            <View style={styles.section}>
+              <Text style={styles.label}>開始日時 *</Text>
+              <View style={styles.dateTimeRow}>
+                <TouchableOpacity
+                  style={[styles.input, styles.dateInput]}
+                  onPress={() => openDatePicker('start')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={startDate ? styles.dateText : styles.dateTextPlaceholder}>
+                    {startDate ? new Date(startDate).toLocaleDateString('ja-JP', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      weekday: 'short'
+                    }) : '日付を選択'}
                   </Text>
-                </View>
-              </>
-            )}
+                </TouchableOpacity>
+                <TextInput
+                  style={[styles.input, styles.timeInput]}
+                  placeholder="00:00"
+                  value={startTime}
+                  onChangeText={setStartTime}
+                  placeholderTextColor="#999"
+                  keyboardType="numbers-and-punctuation"
+                />
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text style={styles.label}>終了日時</Text>
+              <View style={styles.dateTimeRow}>
+                <TouchableOpacity
+                  style={[styles.input, styles.dateInput]}
+                  onPress={() => openDatePicker('endEvent')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={endDateEvent ? styles.dateText : styles.dateTextPlaceholder}>
+                    {endDateEvent ? new Date(endDateEvent).toLocaleDateString('ja-JP', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      weekday: 'short'
+                    }) : '日付を選択'}
+                  </Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={[styles.input, styles.timeInput]}
+                  placeholder="00:00"
+                  value={endTime}
+                  onChangeText={setEndTime}
+                  placeholderTextColor="#999"
+                  keyboardType="numbers-and-punctuation"
+                />
+              </View>
+            </View>
+
+            {/* 繰り返し設定 */}
+            <View style={styles.section}>
+              <View style={styles.switchRow}>
+                <Text style={styles.label}>繰り返し</Text>
+                <TouchableOpacity
+                  style={[styles.switch, hasRecurrence && styles.switchActive]}
+                  onPress={() => setHasRecurrence(!hasRecurrence)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.switchThumb, hasRecurrence && styles.switchThumbActive]} />
+                </TouchableOpacity>
+              </View>
+
+              {hasRecurrence && (
+                <>
+                  <View style={styles.recurrenceRow}>
+                    {(['daily', 'weekly', 'monthly', 'yearly'] as const).map((freq) => (
+                      <TouchableOpacity
+                        key={freq}
+                        style={[
+                          styles.recurrenceButton,
+                          recurrenceFrequency === freq && styles.recurrenceButtonActive,
+                        ]}
+                        onPress={() => setRecurrenceFrequency(freq)}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            styles.recurrenceButtonText,
+                            recurrenceFrequency === freq && styles.recurrenceButtonTextActive,
+                          ]}
+                        >
+                          {freq === 'daily' ? '毎日' : freq === 'weekly' ? '毎週' : freq === 'monthly' ? '毎月' : '毎年'}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={styles.intervalRow}>
+                    <Text style={styles.intervalLabel}>間隔:</Text>
+                    <TextInput
+                      style={styles.intervalInput}
+                      value={recurrenceInterval}
+                      onChangeText={setRecurrenceInterval}
+                      keyboardType="number-pad"
+                    />
+                    <Text style={styles.intervalUnit}>
+                      {recurrenceFrequency === 'daily' ? '日ごと' : 
+                       recurrenceFrequency === 'weekly' ? '週ごと' : 
+                       recurrenceFrequency === 'monthly' ? '月ごと' : '年ごと'}
+                    </Text>
+                  </View>
+                </>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* 欲しい物用: 期限 */}
+        {itemType === 'need' && (
+          <View style={styles.section}>
+            <Text style={styles.label}>期限</Text>
+            <TouchableOpacity
+              style={styles.input}
+              onPress={() => openDatePicker('end')}
+              activeOpacity={0.7}
+            >
+              <Text style={endDate ? styles.dateText : styles.dateTextPlaceholder}>
+                {endDate ? new Date(endDate).toLocaleDateString('ja-JP', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  weekday: 'short'
+                }) : '日付を選択'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -592,15 +675,17 @@ export default function ItemFormScreen() {
           <TextInput
             style={styles.input}
             placeholder={
-              itemType === 'need' ? '例: スーパー' : '例: 自宅の庭'
+              itemType === 'need' ? '例: スーパー、Amazon' :
+              itemType === 'event' ? '例: 〇〇公園、自宅' :
+              '例: リビング、会社'
             }
-            placeholderTextColor="#999"
             value={location}
             onChangeText={setLocation}
+            placeholderTextColor="#999"
           />
         </View>
 
-        {/* プライベート（チェックボックス） */}
+        {/* プライベート */}
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.checkboxRow}
@@ -618,7 +703,7 @@ export default function ItemFormScreen() {
       {/* カテゴリ選択モーダル */}
       <Modal
         visible={showCategoryPicker}
-        transparent={true}
+        transparent
         animationType="fade"
         onRequestClose={() => setShowCategoryPicker(false)}
       >
@@ -629,21 +714,22 @@ export default function ItemFormScreen() {
         >
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>カテゴリを選択</Text>
+              <Text style={styles.modalTitle}>カテゴリ選択</Text>
               <TouchableOpacity
-                onPress={() => setShowCategoryPicker(false)}
                 style={styles.modalCloseButton}
+                onPress={() => setShowCategoryPicker(false)}
               >
-                <Text style={styles.modalCloseText}>✕</Text>
+                <Text style={styles.modalCloseText}>×</Text>
               </TouchableOpacity>
             </View>
+
             <ScrollView style={styles.modalContent}>
               {sortedCategories.map((category) => (
                 <TouchableOpacity
                   key={category.categoryId}
                   style={[
                     styles.modalOption,
-                    category.categoryId === selectedCategoryId && styles.modalOptionSelected,
+                    selectedCategoryId === category.categoryId && styles.modalOptionSelected,
                   ]}
                   onPress={() => {
                     setSelectedCategoryId(category.categoryId);
@@ -653,11 +739,67 @@ export default function ItemFormScreen() {
                 >
                   <View style={styles.modalOptionContent}>
                     <Text style={styles.modalOptionText}>{category.name}</Text>
-                    {category.usageCount > 0 && (
-                      <Text style={styles.modalOptionBadge}>{category.usageCount}</Text>
+                    {category.suggestedFor.includes(itemType) && (
+                      <Text style={styles.modalOptionBadge}>推奨</Text>
                     )}
                   </View>
-                  {category.categoryId === selectedCategoryId && (
+                  {selectedCategoryId === category.categoryId && (
+                    <Text style={styles.modalOptionCheck}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 担当者選択モーダル */}
+      <Modal
+        visible={showAssigneePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAssigneePicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowAssigneePicker(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>担当者選択</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowAssigneePicker(false)}
+              >
+                <Text style={styles.modalCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent}>
+              {familyMembers.map((member) => (
+                <TouchableOpacity
+                  key={member.userId}
+                  style={[
+                    styles.modalOption,
+                    assignedTo === member.userId && styles.modalOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setAssignedTo(member.userId);
+                    setShowAssigneePicker(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.modalOptionContent}>
+                    <Text style={styles.modalOptionText}>{member.displayName}</Text>
+                    {member.userId === user?.uid && (
+                      <Text style={styles.modalOptionBadge}>自分</Text>
+                    )}
+                    {member.role === 'admin' && (
+                      <Text style={styles.modalOptionBadge}>管理者</Text>
+                    )}
+                  </View>
+                  {assignedTo === member.userId && (
                     <Text style={styles.modalOptionCheck}>✓</Text>
                   )}
                 </TouchableOpacity>
@@ -670,80 +812,82 @@ export default function ItemFormScreen() {
       {/* 日付選択モーダル */}
       <Modal
         visible={showDatePicker}
-        transparent={true}
-        animationType="slide"
+        transparent
+        animationType="fade"
         onRequestClose={() => setShowDatePicker(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.calendarContainer}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowDatePicker(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.calendarContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {calendar.year}年{calendar.month + 1}月
+                {calendar.year}年 {calendar.month + 1}月
               </Text>
               <TouchableOpacity
-                onPress={() => setShowDatePicker(false)}
                 style={styles.modalCloseButton}
+                onPress={() => setShowDatePicker(false)}
               >
-                <Text style={styles.modalCloseText}>✕</Text>
+                <Text style={styles.modalCloseText}>×</Text>
               </TouchableOpacity>
             </View>
-            
+
             {/* 曜日ヘッダー */}
             <View style={styles.calendarWeekRow}>
               {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
                 <Text key={day} style={styles.calendarWeekText}>{day}</Text>
               ))}
             </View>
-            
+
             {/* カレンダーグリッド */}
             <View style={styles.calendarGrid}>
               {calendar.days.map((day, index) => {
-                const dateStr = day ? `${calendar.year}-${String(calendar.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
-                const isSelected = dateStr === tempDate;
-                
+                if (day === null) {
+                  return <View key={`empty-${index}`} style={[styles.calendarDay, styles.calendarDayEmpty]} />;
+                }
+
+                const dateStr = `${calendar.year}-${String(calendar.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const isSelected = tempDate === dateStr;
+
                 return (
                   <TouchableOpacity
-                    key={index}
+                    key={day}
                     style={[
                       styles.calendarDay,
-                      day === null && styles.calendarDayEmpty,
                       isSelected && styles.calendarDaySelected,
                     ]}
-                    onPress={() => day && setTempDate(dateStr)}
-                    disabled={!day}
+                    onPress={() => setTempDate(dateStr)}
                     activeOpacity={0.7}
                   >
-                    {day && (
-                      <Text style={[
-                        styles.calendarDayText,
-                        isSelected && styles.calendarDayTextSelected,
-                      ]}>
-                        {day}
-                      </Text>
-                    )}
+                    <Text style={[
+                      styles.calendarDayText,
+                      isSelected && styles.calendarDayTextSelected,
+                    ]}>
+                      {day}
+                    </Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
-            
+
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={styles.modalCancelButton}
                 onPress={() => setShowDatePicker(false)}
-                activeOpacity={0.7}
               >
                 <Text style={styles.modalCancelText}>キャンセル</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalApplyButton}
                 onPress={applyDateSelection}
-                activeOpacity={0.7}
               >
-                <Text style={styles.modalApplyText}>適用</Text>
+                <Text style={styles.modalApplyText}>選択</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -754,23 +898,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  // ヘッダー（統一 - 高さ小さめ）
   header: {
-    backgroundColor: '#2196F3',
-    paddingTop: 50,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#2196F3',
   },
   cancelButton: {
-    padding: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   cancelButtonText: {
     fontSize: 16,
@@ -782,7 +921,8 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   saveButton: {
-    padding: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   saveButtonText: {
     fontSize: 16,
@@ -791,16 +931,23 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 16,
   },
   section: {
-    marginBottom: 20,
+    padding: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: '#666',
     marginBottom: 8,
+  },
+  hint: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 4,
   },
   input: {
     backgroundColor: '#fff',
@@ -811,7 +958,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  picker: {
+  selectButton: {
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#ddd',
@@ -821,11 +968,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  pickerText: {
+  selectButtonText: {
     fontSize: 16,
     color: '#333',
   },
-  pickerArrow: {
+  selectButtonArrow: {
     fontSize: 12,
     color: '#999',
   },
@@ -836,33 +983,15 @@ const styles = StyleSheet.create({
   typeButton: {
     flex: 1,
     paddingVertical: 12,
-    paddingHorizontal: 8,
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#ddd',
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
+    backgroundColor: '#fff',
   },
   typeButtonActive: {
-    backgroundColor: '#f0f8ff',
     borderColor: '#2196F3',
-  },
-  typeIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#ddd',
-  },
-  typeIndicatorTask: {
-    backgroundColor: '#FF9800',
-  },
-  typeIndicatorEvent: {
-    backgroundColor: '#2196F3',
-  },
-  typeIndicatorNeed: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#f0f8ff',
   },
   typeButtonText: {
     fontSize: 14,
