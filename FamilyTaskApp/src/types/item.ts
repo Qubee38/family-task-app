@@ -82,7 +82,7 @@ export interface CategoryCreateRequest {
 }
 
 export interface CategoryUpdateRequest {
-  name?: string;
+  name: string;
   suggestedFor?: ItemType[];
   points?: number;
 }

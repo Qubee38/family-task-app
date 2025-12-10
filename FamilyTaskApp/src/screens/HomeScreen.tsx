@@ -21,7 +21,7 @@ type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
-  const { user, logout } = useAuth();
+  const { user, signOut } = useAuth();
   const { selectedFamily, selectFamily } = useFamily();
   const { items, loadItems } = useItem();
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -37,7 +37,7 @@ export default function HomeScreen() {
 
   const handleLogout = async () => {
     try {
-      await logout();
+      await signOut();
       navigation.reset({
         index: 0,
         routes: [{ name: 'FamilyList' }],
@@ -158,7 +158,7 @@ export default function HomeScreen() {
         {selectedFamily && (
           <View style={styles.familyCard}>
             <View style={styles.familyCardHeader}>
-              <Text style={styles.familyName}>{selectedFamily.familyName}</Text>
+              <Text style={styles.familyName}>{selectedFamily.name}</Text>
               <Text style={styles.memberCount}>
                 メンバー: {selectedFamily.members?.length || 0}人
               </Text>
