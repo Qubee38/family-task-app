@@ -41,7 +41,7 @@ export default function ItemFormScreen() {
   const isEditMode = !!itemId;
   const editingItem = isEditMode ? items.find(item => item.itemId === itemId) : null;
 
-  // タイプ選択（編集時は変更不可）
+  // タイプ選択（編集時は変更不可、デフォルトはタスク）
   const [itemType, setItemType] = useState<ItemType>(
     editingItem?.type || initialType || 'task'
   );
@@ -49,21 +49,16 @@ export default function ItemFormScreen() {
   // 共通フィールド
   const [title, setTitle] = useState(editingItem?.title || '');
   const [selectedCategoryId, setSelectedCategoryId] = useState(editingItem?.categoryId || '');
-  const [visibility, setVisibility] = useState<Visibility>(editingItem?.visibility || 'family');
+  const [isPrivate, setIsPrivate] = useState(editingItem?.visibility === 'private');
   const [location, setLocation] = useState(editingItem?.location || '');
 
-  // タスク・必要物用フィールド
+  // タスク・欲しい物・予定用フィールド
   const [priority, setPriority] = useState<Priority>(editingItem?.priority || 'medium');
 
-  // タスク・予定用フィールド（期限・日時）
+  // タスク・欲しい物用フィールド（期限）
   const [endDate, setEndDate] = useState(
     editingItem?.endDateTime 
       ? new Date(editingItem.endDateTime).toISOString().split('T')[0] 
-      : ''
-  );
-  const [endTime, setEndTime] = useState(
-    editingItem?.endDateTime 
-      ? new Date(editingItem.endDateTime).toTimeString().slice(0, 5) 
       : ''
   );
 
@@ -78,6 +73,16 @@ export default function ItemFormScreen() {
       ? new Date(editingItem.startDateTime).toTimeString().slice(0, 5) 
       : ''
   );
+  const [endDateEvent, setEndDateEvent] = useState(
+    editingItem?.endDateTime 
+      ? new Date(editingItem.endDateTime).toISOString().split('T')[0] 
+      : ''
+  );
+  const [endTime, setEndTime] = useState(
+    editingItem?.endDateTime 
+      ? new Date(editingItem.endDateTime).toTimeString().slice(0, 5) 
+      : ''
+  );
   const [hasRecurrence, setHasRecurrence] = useState(!!editingItem?.recurrence);
   const [recurrenceFrequency, setRecurrenceFrequency] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>(
     editingItem?.recurrence?.frequency || 'weekly'
@@ -88,6 +93,11 @@ export default function ItemFormScreen() {
 
   // カテゴリ選択モーダル
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  
+  // 日付選択モーダル
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [datePickerType, setDatePickerType] = useState<'start' | 'end' | 'endEvent'>('start');
+  const [tempDate, setTempDate] = useState('');
 
   // タイプごとのカテゴリソート
   const sortedCategories = [...categories].sort((a, b) => {
@@ -119,6 +129,57 @@ export default function ItemFormScreen() {
     setItemType(type);
     // カテゴリをリセット
     setSelectedCategoryId('');
+  };
+
+  // 日付選択を開く
+  const openDatePicker = (type: 'start' | 'end' | 'endEvent') => {
+    setDatePickerType(type);
+    if (type === 'start') {
+      setTempDate(startDate);
+    } else if (type === 'end') {
+      setTempDate(endDate);
+    } else {
+      setTempDate(endDateEvent);
+    }
+    setShowDatePicker(true);
+  };
+
+  // 日付選択を適用
+  const applyDateSelection = () => {
+    if (datePickerType === 'start') {
+      setStartDate(tempDate);
+      // 開始日が選択されたら終了日も自動的に開始日に合わせる
+      if (!endDateEvent) {
+        setEndDateEvent(tempDate);
+      }
+    } else if (datePickerType === 'end') {
+      setEndDate(tempDate);
+    } else {
+      setEndDateEvent(tempDate);
+    }
+    setShowDatePicker(false);
+  };
+
+  // 簡易カレンダー（月表示）
+  const generateCalendar = () => {
+    const baseDate = tempDate ? new Date(tempDate) : new Date();
+    const year = baseDate.getFullYear();
+    const month = baseDate.getMonth();
+    
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push(null);
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(i);
+    }
+    
+    return { year, month, days };
   };
 
   const handleSave = async () => {
@@ -159,7 +220,7 @@ export default function ItemFormScreen() {
       const commonData = {
         title: title.trim(),
         categoryId: selectedCategoryId,
-        visibility,
+        visibility: (isPrivate ? 'private' : 'family') as Visibility,
         location: location.trim() || undefined,
       };
 
@@ -172,13 +233,14 @@ export default function ItemFormScreen() {
         // タイプ別フィールド
         if (itemType === 'task') {
           data.priority = priority;
-          if (endDate && endTime) {
-            data.endDateTime = new Date(`${endDate}T${endTime}`).toISOString();
+          if (endDate) {
+            data.endDateTime = new Date(`${endDate}T23:59:59`).toISOString();
           }
         } else if (itemType === 'event') {
+          data.priority = priority;
           data.startDateTime = new Date(`${startDate}T${startTime}`).toISOString();
-          if (endDate && endTime) {
-            data.endDateTime = new Date(`${endDate}T${endTime}`).toISOString();
+          if (endDateEvent && endTime) {
+            data.endDateTime = new Date(`${endDateEvent}T${endTime}`).toISOString();
           }
           if (hasRecurrence) {
             data.recurrence = {
@@ -188,6 +250,9 @@ export default function ItemFormScreen() {
           }
         } else if (itemType === 'need') {
           data.priority = priority;
+          if (endDate) {
+            data.endDateTime = new Date(`${endDate}T23:59:59`).toISOString();
+          }
         }
 
         await updateItem(itemId, data);
@@ -202,13 +267,14 @@ export default function ItemFormScreen() {
         // タイプ別フィールド
         if (itemType === 'task') {
           data.priority = priority;
-          if (endDate && endTime) {
-            data.endDateTime = new Date(`${endDate}T${endTime}`).toISOString();
+          if (endDate) {
+            data.endDateTime = new Date(`${endDate}T23:59:59`).toISOString();
           }
         } else if (itemType === 'event') {
+          data.priority = priority;
           data.startDateTime = new Date(`${startDate}T${startTime}`).toISOString();
-          if (endDate && endTime) {
-            data.endDateTime = new Date(`${endDate}T${endTime}`).toISOString();
+          if (endDateEvent && endTime) {
+            data.endDateTime = new Date(`${endDateEvent}T${endTime}`).toISOString();
           }
           if (hasRecurrence) {
             data.recurrence = {
@@ -218,6 +284,9 @@ export default function ItemFormScreen() {
           }
         } else if (itemType === 'need') {
           data.priority = priority;
+          if (endDate) {
+            data.endDateTime = new Date(`${endDate}T23:59:59`).toISOString();
+          }
         }
 
         await createItem(data);
@@ -236,17 +305,19 @@ export default function ItemFormScreen() {
     }
   };
 
-  // ヘッダーの色とタイトル
-  const headerStyle = {
-    task: { bg: '#2196F3', title: isEditMode ? 'タスクを編集' : '新しいタスク' },
-    event: { bg: '#4CAF50', title: isEditMode ? '予定を編集' : '新しい予定' },
-    need: { bg: '#FF9800', title: isEditMode ? '必要物を編集' : '新しい必要物' },
-  }[itemType];
+  // タイプ別のラベル
+  const typeLabels = {
+    task: '📋 タスク',
+    event: '📅 予定',
+    need: '🛒 欲しい物',
+  };
+
+  const calendar = generateCalendar();
 
   return (
     <View style={styles.container}>
-      {/* ヘッダー */}
-      <View style={[styles.header, { backgroundColor: headerStyle.bg }]}>
+      {/* ヘッダー（統一 - 高さ小さめ） */}
+      <View style={styles.header}>
         <TouchableOpacity
           style={styles.cancelButton}
           onPress={() => navigation.goBack()}
@@ -254,7 +325,9 @@ export default function ItemFormScreen() {
         >
           <Text style={styles.cancelButtonText}>キャンセル</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{headerStyle.title}</Text>
+        <Text style={styles.headerTitle}>
+          {isEditMode ? '編集' : '新規作成'}
+        </Text>
         <TouchableOpacity
           style={styles.saveButton}
           onPress={handleSave}
@@ -275,51 +348,32 @@ export default function ItemFormScreen() {
           <View style={styles.section}>
             <Text style={styles.label}>種類 *</Text>
             <View style={styles.typeContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  itemType === 'task' && styles.typeButtonTask,
-                ]}
-                onPress={() => handleTypeChange('task')}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.typeButtonText,
-                  itemType === 'task' && styles.typeButtonTextActive,
-                ]}>
-                  📋 タスク
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  itemType === 'event' && styles.typeButtonEvent,
-                ]}
-                onPress={() => handleTypeChange('event')}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.typeButtonText,
-                  itemType === 'event' && styles.typeButtonTextActive,
-                ]}>
-                  📅 予定
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.typeButton,
-                  itemType === 'need' && styles.typeButtonNeed,
-                ]}
-                onPress={() => handleTypeChange('need')}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.typeButtonText,
-                  itemType === 'need' && styles.typeButtonTextActive,
-                ]}>
-                  🛒 必要物
-                </Text>
-              </TouchableOpacity>
+              {(['task', 'event', 'need'] as ItemType[]).map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.typeButton,
+                    itemType === type && styles.typeButtonActive,
+                  ]}
+                  onPress={() => handleTypeChange(type)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[
+                    styles.typeIndicator,
+                    itemType === type && (
+                      type === 'task' ? styles.typeIndicatorTask :
+                      type === 'event' ? styles.typeIndicatorEvent :
+                      styles.typeIndicatorNeed
+                    )
+                  ]} />
+                  <Text style={[
+                    styles.typeButtonText,
+                    itemType === type && styles.typeButtonTextActive,
+                  ]}>
+                    {typeLabels[type]}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         )}
@@ -327,7 +381,7 @@ export default function ItemFormScreen() {
         {/* タイトル */}
         <View style={styles.section}>
           <Text style={styles.label}>
-            {itemType === 'need' ? '必要物' : 'タイトル'} *
+            {itemType === 'need' ? '欲しい物' : 'タイトル'} *
           </Text>
           <TextInput
             style={styles.input}
@@ -358,72 +412,72 @@ export default function ItemFormScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 優先度（タスク・必要物のみ） */}
-        {(itemType === 'task' || itemType === 'need') && (
-          <View style={styles.section}>
-            <Text style={styles.label}>優先度</Text>
-            <View style={styles.priorityContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.priorityButton,
-                  priority === 'high' && styles.priorityButtonHigh,
-                ]}
-                onPress={() => setPriority('high')}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.priorityButtonText,
-                  priority === 'high' && styles.priorityButtonTextActive,
-                ]}>
-                  🔴 高
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.priorityButton,
-                  priority === 'medium' && styles.priorityButtonMedium,
-                ]}
-                onPress={() => setPriority('medium')}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.priorityButtonText,
-                  priority === 'medium' && styles.priorityButtonTextActive,
-                ]}>
-                  🟡 中
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.priorityButton,
-                  priority === 'low' && styles.priorityButtonLow,
-                ]}
-                onPress={() => setPriority('low')}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  styles.priorityButtonText,
-                  priority === 'low' && styles.priorityButtonTextActive,
-                ]}>
-                  🟢 低
-                </Text>
-              </TouchableOpacity>
-            </View>
+        {/* 優先度（すべてのタイプ） */}
+        <View style={styles.section}>
+          <Text style={styles.label}>優先度</Text>
+          <View style={styles.priorityContainer}>
+            <TouchableOpacity
+              style={[
+                styles.priorityButton,
+                priority === 'high' && styles.priorityButtonHigh,
+              ]}
+              onPress={() => setPriority('high')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.priorityButtonText,
+                priority === 'high' && styles.priorityButtonTextActive,
+              ]}>
+                🔴 高
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.priorityButton,
+                priority === 'medium' && styles.priorityButtonMedium,
+              ]}
+              onPress={() => setPriority('medium')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.priorityButtonText,
+                priority === 'medium' && styles.priorityButtonTextActive,
+              ]}>
+                🟡 中
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.priorityButton,
+                priority === 'low' && styles.priorityButtonLow,
+              ]}
+              onPress={() => setPriority('low')}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.priorityButtonText,
+                priority === 'low' && styles.priorityButtonTextActive,
+              ]}>
+                🟢 低
+              </Text>
+            </TouchableOpacity>
           </View>
-        )}
+        </View>
 
         {/* 開始日時（予定のみ） */}
         {itemType === 'event' && (
           <View style={styles.section}>
             <Text style={styles.label}>開始日時 *</Text>
             <View style={styles.dateTimeRow}>
-              <TextInput
+              <TouchableOpacity
                 style={[styles.input, styles.dateInput]}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#999"
-                value={startDate}
-                onChangeText={setStartDate}
-              />
+                onPress={() => openDatePicker('start')}
+                activeOpacity={0.7}
+              >
+                <Text style={startDate ? styles.dateText : styles.dateTextPlaceholder}>
+                  {startDate || '日付を選択'}
+                </Text>
+              </TouchableOpacity>
               <TextInput
                 style={[styles.input, styles.timeInput]}
                 placeholder="HH:MM"
@@ -432,24 +486,18 @@ export default function ItemFormScreen() {
                 onChangeText={setStartTime}
               />
             </View>
-            <Text style={styles.hint}>形式: 2024-12-15  10:00</Text>
-          </View>
-        )}
-
-        {/* 期限・終了日時 */}
-        {(itemType === 'task' || itemType === 'event') && (
-          <View style={styles.section}>
-            <Text style={styles.label}>
-              {itemType === 'task' ? '期限' : '終了日時'}
-            </Text>
+            
+            <Text style={styles.label}>終了日時</Text>
             <View style={styles.dateTimeRow}>
-              <TextInput
+              <TouchableOpacity
                 style={[styles.input, styles.dateInput]}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#999"
-                value={endDate}
-                onChangeText={setEndDate}
-              />
+                onPress={() => openDatePicker('endEvent')}
+                activeOpacity={0.7}
+              >
+                <Text style={endDateEvent ? styles.dateText : styles.dateTextPlaceholder}>
+                  {endDateEvent || '日付を選択'}
+                </Text>
+              </TouchableOpacity>
               <TextInput
                 style={[styles.input, styles.timeInput]}
                 placeholder="HH:MM"
@@ -458,7 +506,22 @@ export default function ItemFormScreen() {
                 onChangeText={setEndTime}
               />
             </View>
-            <Text style={styles.hint}>形式: 2024-12-15  {itemType === 'task' ? '23:59' : '11:00'}</Text>
+          </View>
+        )}
+
+        {/* 期限（タスク・欲しい物） */}
+        {(itemType === 'task' || itemType === 'need') && (
+          <View style={styles.section}>
+            <Text style={styles.label}>期限</Text>
+            <TouchableOpacity
+              style={styles.input}
+              onPress={() => openDatePicker('end')}
+              activeOpacity={0.7}
+            >
+              <Text style={endDate ? styles.dateText : styles.dateTextPlaceholder}>
+                {endDate || '日付を選択'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -479,42 +542,24 @@ export default function ItemFormScreen() {
             {hasRecurrence && (
               <>
                 <View style={styles.recurrenceRow}>
-                  <TouchableOpacity
-                    style={[styles.recurrenceButton, recurrenceFrequency === 'daily' && styles.recurrenceButtonActive]}
-                    onPress={() => setRecurrenceFrequency('daily')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.recurrenceButtonText, recurrenceFrequency === 'daily' && styles.recurrenceButtonTextActive]}>
-                      毎日
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.recurrenceButton, recurrenceFrequency === 'weekly' && styles.recurrenceButtonActive]}
-                    onPress={() => setRecurrenceFrequency('weekly')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.recurrenceButtonText, recurrenceFrequency === 'weekly' && styles.recurrenceButtonTextActive]}>
-                      毎週
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.recurrenceButton, recurrenceFrequency === 'monthly' && styles.recurrenceButtonActive]}
-                    onPress={() => setRecurrenceFrequency('monthly')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.recurrenceButtonText, recurrenceFrequency === 'monthly' && styles.recurrenceButtonTextActive]}>
-                      毎月
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.recurrenceButton, recurrenceFrequency === 'yearly' && styles.recurrenceButtonActive]}
-                    onPress={() => setRecurrenceFrequency('yearly')}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.recurrenceButtonText, recurrenceFrequency === 'yearly' && styles.recurrenceButtonTextActive]}>
-                      毎年
-                    </Text>
-                  </TouchableOpacity>
+                  {['daily', 'weekly', 'monthly', 'yearly'].map((freq) => (
+                    <TouchableOpacity
+                      key={freq}
+                      style={[
+                        styles.recurrenceButton,
+                        recurrenceFrequency === freq && styles.recurrenceButtonActive
+                      ]}
+                      onPress={() => setRecurrenceFrequency(freq as any)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[
+                        styles.recurrenceButtonText,
+                        recurrenceFrequency === freq && styles.recurrenceButtonTextActive
+                      ]}>
+                        {freq === 'daily' ? '毎日' : freq === 'weekly' ? '毎週' : freq === 'monthly' ? '毎月' : '毎年'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
                 
                 <View style={styles.intervalRow}>
@@ -555,41 +600,18 @@ export default function ItemFormScreen() {
           />
         </View>
 
-        {/* 公開範囲 */}
+        {/* プライベート（チェックボックス） */}
         <View style={styles.section}>
-          <Text style={styles.label}>公開範囲</Text>
-          <View style={styles.visibilityContainer}>
-            <TouchableOpacity
-              style={[
-                styles.visibilityButton,
-                visibility === 'family' && styles.visibilityButtonActive,
-              ]}
-              onPress={() => setVisibility('family')}
-              activeOpacity={0.7}
-            >
-              <Text style={[
-                styles.visibilityButtonText,
-                visibility === 'family' && styles.visibilityButtonTextActive,
-              ]}>
-                👥 家族全体
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.visibilityButton,
-                visibility === 'private' && styles.visibilityButtonActive,
-              ]}
-              onPress={() => setVisibility('private')}
-              activeOpacity={0.7}
-            >
-              <Text style={[
-                styles.visibilityButtonText,
-                visibility === 'private' && styles.visibilityButtonTextActive,
-              ]}>
-                🔒 自分のみ
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.checkboxRow}
+            onPress={() => setIsPrivate(!isPrivate)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, isPrivate && styles.checkboxChecked]}>
+              {isPrivate && <Text style={styles.checkboxCheck}>✓</Text>}
+            </View>
+            <Text style={styles.checkboxLabel}>プライベート（自分のみ表示）</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -644,6 +666,85 @@ export default function ItemFormScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* 日付選択モーダル */}
+      <Modal
+        visible={showDatePicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.calendarContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {calendar.year}年{calendar.month + 1}月
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowDatePicker(false)}
+                style={styles.modalCloseButton}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* 曜日ヘッダー */}
+            <View style={styles.calendarWeekRow}>
+              {['日', '月', '火', '水', '木', '金', '土'].map((day) => (
+                <Text key={day} style={styles.calendarWeekText}>{day}</Text>
+              ))}
+            </View>
+            
+            {/* カレンダーグリッド */}
+            <View style={styles.calendarGrid}>
+              {calendar.days.map((day, index) => {
+                const dateStr = day ? `${calendar.year}-${String(calendar.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+                const isSelected = dateStr === tempDate;
+                
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.calendarDay,
+                      day === null && styles.calendarDayEmpty,
+                      isSelected && styles.calendarDaySelected,
+                    ]}
+                    onPress={() => day && setTempDate(dateStr)}
+                    disabled={!day}
+                    activeOpacity={0.7}
+                  >
+                    {day && (
+                      <Text style={[
+                        styles.calendarDayText,
+                        isSelected && styles.calendarDayTextSelected,
+                      ]}>
+                        {day}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowDatePicker(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCancelText}>キャンセル</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalApplyButton}
+                onPress={applyDateSelection}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalApplyText}>適用</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -653,13 +754,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  // ヘッダー（統一 - 高さ小さめ）
   header: {
-    paddingTop: 60,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
+    backgroundColor: '#2196F3',
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   cancelButton: {
     padding: 8,
@@ -683,10 +791,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
   section: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   label: {
     fontSize: 14,
@@ -702,11 +810,6 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     color: '#333',
-  },
-  hint: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 4,
   },
   picker: {
     backgroundColor: '#fff',
@@ -733,22 +836,33 @@ const styles = StyleSheet.create({
   typeButton: {
     flex: 1,
     paddingVertical: 12,
+    paddingHorizontal: 8,
     borderRadius: 8,
     borderWidth: 2,
     borderColor: '#ddd',
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
   },
-  typeButtonTask: {
-    backgroundColor: '#2196F3',
+  typeButtonActive: {
+    backgroundColor: '#f0f8ff',
     borderColor: '#2196F3',
   },
-  typeButtonEvent: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
+  typeIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ddd',
   },
-  typeButtonNeed: {
+  typeIndicatorTask: {
     backgroundColor: '#FF9800',
-    borderColor: '#FF9800',
+  },
+  typeIndicatorEvent: {
+    backgroundColor: '#2196F3',
+  },
+  typeIndicatorNeed: {
+    backgroundColor: '#4CAF50',
   },
   typeButtonText: {
     fontSize: 14,
@@ -756,7 +870,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   typeButtonTextActive: {
-    color: '#fff',
+    color: '#2196F3',
   },
   priorityContainer: {
     flexDirection: 'row',
@@ -769,18 +883,19 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#ddd',
     alignItems: 'center',
+    backgroundColor: '#fff',
   },
   priorityButtonHigh: {
-    backgroundColor: '#f44336',
-    borderColor: '#f44336',
+    borderColor: '#2196F3',
+    backgroundColor: '#f0f8ff',
   },
   priorityButtonMedium: {
-    backgroundColor: '#FF9800',
-    borderColor: '#FF9800',
+    borderColor: '#2196F3',
+    backgroundColor: '#f0f8ff',
   },
   priorityButtonLow: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
+    borderColor: '#2196F3',
+    backgroundColor: '#f0f8ff',
   },
   priorityButtonText: {
     fontSize: 16,
@@ -788,17 +903,26 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   priorityButtonTextActive: {
-    color: '#fff',
+    color: '#2196F3',
   },
   dateTimeRow: {
     flexDirection: 'row',
     gap: 12,
+    marginBottom: 12,
   },
   dateInput: {
     flex: 2,
   },
   timeInput: {
     flex: 1,
+  },
+  dateText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  dateTextPlaceholder: {
+    fontSize: 16,
+    color: '#999',
   },
   switchRow: {
     flexDirection: 'row',
@@ -844,7 +968,7 @@ const styles = StyleSheet.create({
     borderColor: '#4CAF50',
   },
   recurrenceButtonText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#666',
   },
@@ -875,29 +999,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  visibilityContainer: {
+  checkboxRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
-  visibilityButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#ddd',
+    borderColor: '#ccc',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  visibilityButtonActive: {
+  checkboxChecked: {
     backgroundColor: '#2196F3',
     borderColor: '#2196F3',
   },
-  visibilityButtonText: {
+  checkboxCheck: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#666',
-  },
-  visibilityButtonTextActive: {
+    fontWeight: 'bold',
     color: '#fff',
+  },
+  checkboxLabel: {
+    fontSize: 16,
+    color: '#333',
   },
 
   // モーダル
@@ -979,5 +1106,90 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#2196F3',
     fontWeight: 'bold',
+  },
+  
+  // カレンダーモーダル
+  calendarContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  calendarWeekRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  calendarWeekText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 10,
+  },
+  calendarDay: {
+    width: '14.28%',
+    aspectRatio: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 4,
+  },
+  calendarDayEmpty: {
+    opacity: 0,
+  },
+  calendarDaySelected: {
+    backgroundColor: '#2196F3',
+    borderRadius: 20,
+  },
+  calendarDayText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  calendarDayTextSelected: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 16,
+    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+  },
+  modalCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  modalApplyButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#2196F3',
+    alignItems: 'center',
+  },
+  modalApplyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
   },
 });

@@ -34,22 +34,22 @@ export default function ItemListScreen() {
   const initialType = route.params?.type;
   
   // フィルター状態
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'completed'>('active');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [selectedTypes, setSelectedTypes] = useState<ItemType[]>(
     initialType ? [initialType] : ['task', 'event', 'need']
   );
+  const [hideCompleted, setHideCompleted] = useState(true);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [selectedAssignee, setSelectedAssignee] = useState<string>('');
   const [priorityFilter, setPriorityFilter] = useState<Priority | ''>('');
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [showTypeModal, setShowTypeModal] = useState(false);
 
   useEffect(() => {
     // 画面表示時にアイテムを取得
     const filter: any = {};
     
-    if (statusFilter === 'completed') filter.isCompleted = true;
-    if (statusFilter === 'active') filter.isCompleted = false;
+    if (hideCompleted) filter.isCompleted = false;
     if (selectedCategoryId) filter.categoryId = selectedCategoryId;
     if (selectedAssignee) filter.assignedTo = selectedAssignee;
     
@@ -65,7 +65,7 @@ export default function ItemListScreen() {
     }
     
     logger.info('📋 ItemListScreen: アイテムを取得', { selectedTypes, filter });
-  }, [statusFilter, selectedTypes, selectedCategoryId, selectedAssignee]);
+  }, [hideCompleted, selectedTypes, selectedCategoryId, selectedAssignee]);
 
   const handleItemPress = (item: ItemResponse) => {
     navigation.navigate('ItemDetail', { itemId: item.itemId });
@@ -73,7 +73,7 @@ export default function ItemListScreen() {
 
   const handleCreateItem = () => {
     // タイプが1つだけ選択されている場合はそのタイプで作成
-    const type = selectedTypes.length === 1 ? selectedTypes[0] : undefined;
+    const type = selectedTypes.length === 1 ? selectedTypes[0] : 'task';
     navigation.navigate('ItemForm', { type });
   };
 
@@ -108,6 +108,22 @@ export default function ItemListScreen() {
     (selectedAssignee ? 1 : 0) + 
     (priorityFilter ? 1 : 0);
 
+  // タイプ選択の切り替え
+  const toggleTypeSelection = (type: ItemType) => {
+    setSelectedTypes(prev => {
+      if (prev.includes(type)) {
+        // 既に選択されている場合は削除（ただし最低1つは残す）
+        if (prev.length > 1) {
+          return prev.filter(t => t !== type);
+        }
+        return prev;
+      } else {
+        // 選択されていない場合は追加
+        return [...prev, type];
+      }
+    });
+  };
+
   // フィルター適用
   const filteredItems = items
     .filter(item => selectedTypes.includes(item.type))  // タイプフィルター
@@ -134,9 +150,9 @@ export default function ItemListScreen() {
   // タイプ別の色設定
   const getTypeColor = (type: ItemType) => {
     return {
-      task: '#2196F3',
-      event: '#4CAF50',
-      need: '#FF9800',
+      task: '#FF9800',
+      event: '#2196F3',
+      need: '#4CAF50',
     }[type];
   };
 
@@ -144,7 +160,7 @@ export default function ItemListScreen() {
     return {
       task: '📋 タスク',
       event: '📅 予定',
-      need: '🛒 必要物',
+      need: '🛒 欲しい物',
     }[type];
   };
 
@@ -190,30 +206,28 @@ export default function ItemListScreen() {
           
           <View style={styles.itemInfo}>
             <View style={styles.itemTitleRow}>
-              <Text style={[styles.typeLabel, { backgroundColor: typeColor + '20', color: typeColor }]}>
-                {getTypeLabel(item.type)}
-              </Text>
+              <View style={[styles.typeIndicator, { backgroundColor: typeColor }]} />
               {priorityEmoji && <Text style={styles.priorityEmoji}>{priorityEmoji}</Text>}
+              <Text style={[styles.itemTitle, item.isCompleted && styles.itemTitleCompleted]}>
+                {item.title}
+              </Text>
             </View>
-            <Text style={[styles.itemTitle, item.isCompleted && styles.itemTitleCompleted]}>
-              {item.title}
-            </Text>
             <View style={styles.itemMeta}>
               {dateText && (
-                <Text style={styles.itemMetaText}>⏰ {dateText}</Text>
+                <Text style={styles.itemMetaText}>{dateText}</Text>
               )}
               {item.categoryName && (
-                <Text style={styles.itemMetaText}>🏷️ {item.categoryName}</Text>
+                <Text style={styles.itemMetaText}>• {item.categoryName}</Text>
               )}
               {item.assignedToName && (
-                <Text style={styles.itemMetaText}>👤 {item.assignedToName}</Text>
+                <Text style={styles.itemMetaText}>• {item.assignedToName}</Text>
               )}
               {item.location && (
-                <Text style={styles.itemMetaText}>📍 {item.location}</Text>
+                <Text style={styles.itemMetaText}>• {item.location}</Text>
               )}
               {item.recurrence && (
                 <Text style={styles.itemMetaText}>
-                  🔄 {
+                  • 🔄 {
                     item.recurrence.frequency === 'daily' ? '毎日' :
                     item.recurrence.frequency === 'weekly' ? '毎週' :
                     item.recurrence.frequency === 'monthly' ? '毎月' :
@@ -230,7 +244,7 @@ export default function ItemListScreen() {
 
   return (
     <View style={styles.container}>
-      {/* ヘッダー */}
+      {/* ヘッダー（統一 - 高さ小さめ） */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -249,139 +263,71 @@ export default function ItemListScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* タイプフィルター */}
-      <View style={styles.typeFilterContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <TouchableOpacity
-            style={[
-              styles.typeFilterButton,
-              selectedTypes.length === 3 && styles.typeFilterButtonActive,
-            ]}
-            onPress={() => setSelectedTypes(['task', 'event', 'need'])}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.typeFilterText,
-              selectedTypes.length === 3 && styles.typeFilterTextActive,
-            ]}>
-              すべて
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.typeFilterButton,
-              selectedTypes.length === 1 && selectedTypes.includes('task') && styles.typeFilterButtonActive,
-            ]}
-            onPress={() => setSelectedTypes(['task'])}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.typeFilterText,
-              selectedTypes.length === 1 && selectedTypes.includes('task') && styles.typeFilterTextActive,
-            ]}>
-              📋 タスク
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.typeFilterButton,
-              selectedTypes.length === 1 && selectedTypes.includes('event') && styles.typeFilterButtonActive,
-            ]}
-            onPress={() => setSelectedTypes(['event'])}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.typeFilterText,
-              selectedTypes.length === 1 && selectedTypes.includes('event') && styles.typeFilterTextActive,
-            ]}>
-              📅 予定
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.typeFilterButton,
-              selectedTypes.length === 1 && selectedTypes.includes('need') && styles.typeFilterButtonActive,
-            ]}
-            onPress={() => setSelectedTypes(['need'])}
-            activeOpacity={0.7}
-          >
-            <Text style={[
-              styles.typeFilterText,
-              selectedTypes.length === 1 && selectedTypes.includes('need') && styles.typeFilterTextActive,
-            ]}>
-              🛒 必要物
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
+      {/* 表示モード切替（リスト/カレンダー） - 最上部 */}
+      <View style={styles.viewModeContainer}>
+        <TouchableOpacity
+          style={[styles.viewModeButton, viewMode === 'list' && styles.viewModeButtonActive]}
+          onPress={() => setViewMode('list')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.viewModeText, viewMode === 'list' && styles.viewModeTextActive]}>
+            リスト
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.viewModeButton, viewMode === 'calendar' && styles.viewModeButtonActive]}
+          onPress={() => setViewMode('calendar')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.viewModeText, viewMode === 'calendar' && styles.viewModeTextActive]}>
+            カレンダー
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* 表示切替 & ステータスフィルター */}
-      <View style={styles.filterContainer}>
-        {/* 表示モード切替 */}
-        <View style={styles.viewModeContainer}>
-          <TouchableOpacity
-            style={[styles.viewModeButton, viewMode === 'list' && styles.viewModeButtonActive]}
-            onPress={() => setViewMode('list')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.viewModeText, viewMode === 'list' && styles.viewModeTextActive]}>
-              📋 リスト
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.viewModeButton, viewMode === 'calendar' && styles.viewModeButtonActive]}
-            onPress={() => setViewMode('calendar')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.viewModeText, viewMode === 'calendar' && styles.viewModeTextActive]}>
-              📅 カレンダー
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ステータスフィルター */}
-        <View style={styles.statusFilterRow}>
-          <TouchableOpacity
-            style={[styles.filterButton, statusFilter === 'all' && styles.filterButtonActive]}
-            onPress={() => setStatusFilter('all')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.filterButtonText, statusFilter === 'all' && styles.filterButtonTextActive]}>
-              すべて
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterButton, statusFilter === 'active' && styles.filterButtonActive]}
-            onPress={() => setStatusFilter('active')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.filterButtonText, statusFilter === 'active' && styles.filterButtonTextActive]}>
-              未完了
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterButton, statusFilter === 'completed' && styles.filterButtonActive]}
-            onPress={() => setStatusFilter('completed')}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.filterButtonText, statusFilter === 'completed' && styles.filterButtonTextActive]}>
-              完了
-            </Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* 詳細フィルターボタン */}
+      {/* フィルター（1行） */}
+      <View style={styles.filterRow}>
+        {/* 種類選択（プルダウン風） */}
         <TouchableOpacity
-          style={styles.moreFilterButton}
+          style={styles.filterItem}
+          onPress={() => setShowTypeModal(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.filterItemText}>
+            種類: {
+              selectedTypes.length === 3 ? 'すべて' :
+              selectedTypes.map(t => 
+                t === 'task' ? 'タスク' : t === 'event' ? '予定' : '欲しい物'
+              ).join(', ')
+            }
+          </Text>
+          <Text style={styles.filterItemArrow}>▼</Text>
+        </TouchableOpacity>
+
+        {/* 完了を非表示チェックボックス */}
+        <TouchableOpacity
+          style={styles.checkboxFilter}
+          onPress={() => setHideCompleted(!hideCompleted)}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.checkboxSmall, hideCompleted && styles.checkboxSmallChecked]}>
+            {hideCompleted && <Text style={styles.checkboxSmallCheck}>✓</Text>}
+          </View>
+          <Text style={styles.checkboxFilterText}>完了を非表示</Text>
+        </TouchableOpacity>
+
+        {/* 詳細フィルター */}
+        <TouchableOpacity
+          style={styles.filterIconButton}
           onPress={() => setShowFilterModal(true)}
           activeOpacity={0.7}
         >
-          <Text style={styles.moreFilterText}>
-            🔍 詳細フィルター {activeFilterCount > 0 && `(${activeFilterCount})`}
-          </Text>
+          <Text style={styles.filterIcon}>⚙️</Text>
+          {activeFilterCount > 0 && (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -412,7 +358,80 @@ export default function ItemListScreen() {
         />
       )}
 
-      {/* フィルターモーダル */}
+      {/* 種類選択モーダル */}
+      <Modal
+        visible={showTypeModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowTypeModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowTypeModal(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>種類を選択</Text>
+              <TouchableOpacity
+                onPress={() => setShowTypeModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalContent}>
+              <Text style={styles.modalSubtitle}>複数選択可能</Text>
+              
+              <TouchableOpacity
+                style={styles.checkboxOption}
+                onPress={() => toggleTypeSelection('task')}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.checkboxSmall, selectedTypes.includes('task') && styles.checkboxSmallChecked]}>
+                  {selectedTypes.includes('task') && <Text style={styles.checkboxSmallCheck}>✓</Text>}
+                </View>
+                <Text style={styles.checkboxOptionText}>📋 タスク</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.checkboxOption}
+                onPress={() => toggleTypeSelection('event')}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.checkboxSmall, selectedTypes.includes('event') && styles.checkboxSmallChecked]}>
+                  {selectedTypes.includes('event') && <Text style={styles.checkboxSmallCheck}>✓</Text>}
+                </View>
+                <Text style={styles.checkboxOptionText}>📅 予定</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.checkboxOption}
+                onPress={() => toggleTypeSelection('need')}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.checkboxSmall, selectedTypes.includes('need') && styles.checkboxSmallChecked]}>
+                  {selectedTypes.includes('need') && <Text style={styles.checkboxSmallCheck}>✓</Text>}
+                </View>
+                <Text style={styles.checkboxOptionText}>🛒 欲しい物</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalApplyButton}
+                onPress={() => setShowTypeModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalApplyText}>適用</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* 詳細フィルターモーダル */}
       <Modal
         visible={showFilterModal}
         transparent={true}
@@ -420,7 +439,7 @@ export default function ItemListScreen() {
         onRequestClose={() => setShowFilterModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+          <View style={styles.modalContainerLarge}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>詳細フィルター</Text>
               <TouchableOpacity
@@ -568,14 +587,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  // ヘッダー（統一 - 高さ小さめ）
   header: {
     backgroundColor: '#2196F3',
-    paddingTop: 60,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   backButton: {
     width: 40,
@@ -589,7 +614,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#fff',
   },
@@ -606,98 +631,117 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
   },
-  typeFilterContainer: {
-    backgroundColor: '#fff',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  typeFilterButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 16,
-    marginRight: 8,
-    borderRadius: 20,
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  typeFilterButtonActive: {
-    backgroundColor: '#2196F3',
-    borderColor: '#2196F3',
-  },
-  typeFilterText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  typeFilterTextActive: {
-    color: '#fff',
-  },
-  filterContainer: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
+  // 表示モード切替（最上部）
   viewModeContainer: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   viewModeButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#f5f5f5',
+    paddingVertical: 12,
     alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
   },
   viewModeButtonActive: {
-    backgroundColor: '#2196F3',
+    borderBottomColor: '#2196F3',
   },
   viewModeText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: '#999',
   },
   viewModeTextActive: {
-    color: '#fff',
+    color: '#2196F3',
   },
-  statusFilterRow: {
+  // フィルター（1行）
+  filterRow: {
     flexDirection: 'row',
-    marginBottom: 8,
-  },
-  filterButton: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginHorizontal: 4,
-    borderRadius: 8,
-    backgroundColor: '#f5f5f5',
     alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    gap: 8,
   },
-  filterButtonActive: {
-    backgroundColor: '#2196F3',
+  filterItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
-  filterButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+  filterItemText: {
+    fontSize: 13,
+    color: '#333',
+    fontWeight: '500',
+  },
+  filterItemArrow: {
+    fontSize: 10,
+    color: '#999',
+  },
+  checkboxFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  checkboxFilterText: {
+    fontSize: 12,
     color: '#666',
   },
-  filterButtonTextActive: {
+  checkboxSmall: {
+    width: 18,
+    height: 18,
+    borderRadius: 3,
+    borderWidth: 2,
+    borderColor: '#ccc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  checkboxSmallChecked: {
+    backgroundColor: '#2196F3',
+    borderColor: '#2196F3',
+  },
+  checkboxSmallCheck: {
+    fontSize: 12,
+    fontWeight: 'bold',
     color: '#fff',
   },
-  moreFilterButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+  filterIconButton: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#f5f5f5',
+    borderRadius: 18,
+    position: 'relative',
+  },
+  filterIcon: {
+    fontSize: 18,
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#f44336',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  moreFilterText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
+  filterBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#fff',
   },
   calendarPlaceholder: {
     flex: 1,
@@ -769,12 +813,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     gap: 6,
   },
-  typeLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+  typeIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   priorityEmoji: {
     fontSize: 12,
@@ -783,7 +825,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 4,
+    flex: 1,
   },
   itemTitleCompleted: {
     textDecorationLine: 'line-through',
@@ -792,7 +834,7 @@ const styles = StyleSheet.create({
   itemMeta: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   itemMetaText: {
     fontSize: 12,
@@ -825,13 +867,32 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
   modalContainer: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalContainerLarge: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 400,
     maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -858,6 +919,21 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     padding: 20,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#999',
+    marginBottom: 16,
+  },
+  checkboxOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+  },
+  checkboxOptionText: {
+    fontSize: 16,
+    color: '#333',
   },
   filterSection: {
     marginBottom: 24,
@@ -916,6 +992,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   applyButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  modalApplyButton: {
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#2196F3',
+    alignItems: 'center',
+  },
+  modalApplyText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',

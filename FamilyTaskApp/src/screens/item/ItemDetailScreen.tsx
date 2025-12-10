@@ -62,25 +62,24 @@ export default function ItemDetailScreen() {
     );
   }
 
-  // タイプ別の設定
   const typeConfig = {
     task: { 
       bg: '#2196F3', 
-      title: 'タスク詳細',
+      title: '詳細',
       completedText: '✓ 完了',
       pendingText: '⏳ 未完了',
       actionText: item.isCompleted ? '未完了に戻す' : '完了にする',
     },
     event: { 
-      bg: '#4CAF50', 
-      title: '予定詳細',
+      bg: '#2196F3', 
+      title: '詳細',
       completedText: '✓ 完了',
       pendingText: '⏳ 未完了',
       actionText: item.isCompleted ? '未完了に戻す' : '完了にする',
     },
     need: { 
-      bg: '#FF9800', 
-      title: '必要物詳細',
+      bg: '#2196F3', 
+      title: '詳細',
       completedText: '✓ 購入済み',
       pendingText: '⏳ 未購入',
       actionText: item.isCompleted ? '未購入に戻す' : '購入済みにする',
@@ -373,13 +372,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  // ヘッダー（統一 - 高さ小さめ）
   header: {
-    paddingTop: 60,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   backButton: {
     width: 40,
