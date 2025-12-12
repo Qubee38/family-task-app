@@ -42,10 +42,11 @@ app.add_middleware(
 )
 
 # ルーター登録
-from app.routers import auth, families
+from app.routers import auth, families, items
 
 app.include_router(auth.router, prefix="/api/auth", tags=["認証"])
 app.include_router(families.router, prefix="/api/families", tags=["家族管理"])
+app.include_router(items.router, prefix="/api", tags=["アイテム管理"])
 
 @app.get("/")
 def read_root():

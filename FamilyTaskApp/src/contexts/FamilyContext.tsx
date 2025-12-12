@@ -35,7 +35,7 @@ interface FamilyContextType {
   // 家族グループ操作
   loadFamilies: () => Promise<void>;
   createFamily: (data: FamilyCreate) => Promise<void>;
-  selectFamily: (familyId: string) => Promise<void>;
+  selectFamily: (familyId: string | null) => Promise<void>;
   updateFamily: (familyId: string, data: FamilyUpdate) => Promise<void>;
   deleteFamily: (familyId: string) => Promise<void>;
   
@@ -165,10 +165,20 @@ export const FamilyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   /**
    * 家族を選択（詳細情報を取得）
+   * @param familyId - 選択する家族ID、nullの場合は選択解除
    */
-  const selectFamily = async (familyId: string) => {
+  const selectFamily = async (familyId: string | null) => {
     try {
       setLoading(true);
+      
+      // nullの場合は選択解除
+      if (familyId === null) {
+        logger.debug('家族選択解除');
+        setSelectedFamily(null);
+        await clearLastSelectedFamilyId();
+        return;
+      }
+      
       logger.debug('家族選択:', familyId);
       
       const detail = await apiGetFamilyDetail(familyId);

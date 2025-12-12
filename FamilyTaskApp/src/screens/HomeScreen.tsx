@@ -1,124 +1,385 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform, Alert, ScrollView, Modal } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Modal,
+  Alert,
+  Platform,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
 import { useFamily } from '../contexts/FamilyContext';
-import ConfirmDialog from '../components/ConfirmDialog';
+import { useItem } from '../contexts/ItemContext';
+import { RootStackParamList } from '../types/navigation.types';
+import { Priority } from '../types/item';
+import InitialAvatar from '../components/InitialAvatar';
+import { logger } from '../utils/logger';
+
+type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function HomeScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<HomeScreenNavigationProp>();
   const { user, signOut } = useAuth();
-  const { selectedFamily } = useFamily();
-  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const { selectedFamily, selectFamily } = useFamily();
+  const { items, loadItems } = useItem();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const handleLogout = async () => {
-    console.log('🔹 handleLogout called');
-    
-    // メニューを閉じる
-    setShowUserMenu(false);
-    
-    // Web環境ではカスタムダイアログを使用、ネイティブではAlertを使用
-    if (Platform.OS === 'web') {
-      setShowLogoutDialog(true);
-    } else {
-      Alert.alert(
-        'ログアウト',
-        'ログアウトしますか？',
-        [
-          {
-            text: 'キャンセル',
-            onPress: () => console.log('❌ ログアウトキャンセル'),
-            style: 'cancel',
-          },
-          {
-            text: 'ログアウト',
-            style: 'destructive',
-            onPress: performLogout,
-          },
-        ],
-      );
+  // 画面表示時にタスク、予定、必要物を取得
+  useEffect(() => {
+    if (selectedFamily) {
+      loadItems({ type: 'task', isCompleted: false });
+      loadItems({ type: 'event' });
+      loadItems({ type: 'need', isCompleted: false });
     }
-  };
+  }, [selectedFamily]);
 
-  const performLogout = async () => {
-    console.log('🔹 ログアウト実行開始');
+  const handleLogout = async () => {
     try {
       await signOut();
-      console.log('✅ ログアウト成功');
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'FamilyList' }],
+      });
     } catch (error: any) {
-      console.error('❌ ログアウトエラー:', error);
-      
+      logger.error('ログアウトエラー:', error);
+      const message = error.message || 'ログアウトに失敗しました';
       if (Platform.OS === 'web') {
-        alert('ログアウトに失敗しました: ' + error.message);
+        alert(message);
       } else {
-        Alert.alert('エラー', 'ログアウトに失敗しました: ' + error.message);
+        Alert.alert('エラー', message);
       }
     }
   };
 
-  const handleMenuAction = (action: string) => {
+  const handleFamilyManage = () => {
     setShowUserMenu(false);
-    
-    switch (action) {
-      case 'manage':
-        navigation.navigate('FamilyManage' as never);
-        break;
-      case 'switch':
-        navigation.navigate('FamilyList' as never);
-        break;
-      case 'logout':
-        handleLogout();
-        break;
+    navigation.navigate('FamilyManage');
+  };
+
+  const handleCategoryManage = () => {
+    setShowUserMenu(false);
+    navigation.navigate('CategoryList');
+  };
+
+  const handleSwitchFamily = () => {
+    setShowUserMenu(false);
+    selectFamily(null);
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'FamilyList' }],
+    });
+  };
+
+  const handleViewAllItems = () => {
+    navigation.navigate('Main', {screen: 'ItemListTab'});
+  };
+
+  const handleCreateItem = () => {
+    navigation.navigate('ItemForm', { type: 'task' });
+  };
+
+  // 優先度に応じた絵文字を取得
+  const getPriorityEmoji = (priority?: Priority): string => {
+    switch (priority) {
+      case 'high': return '🔴';
+      case 'medium': return '🟡';
+      case 'low': return '🟢';
+      default: return '';
     }
   };
 
+  // 今日の日付
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // 今日の予定（開始日時が今日、最大3件）
+  const todayEvents = items
+    .filter(item => {
+      if (item.type !== 'event') return false;
+      if (!item.startDateTime) return false;
+      const startDate = new Date(item.startDateTime);
+      startDate.setHours(0, 0, 0, 0);
+      return startDate.getTime() === today.getTime();
+    })
+    .sort((a, b) => {
+      if (!a.startDateTime || !b.startDateTime) return 0;
+      return new Date(a.startDateTime).getTime() - new Date(b.startDateTime).getTime();
+    })
+    .slice(0, 3);
+
+  // 期限が近いタスク（期限順、優先度順、最大3件）
+  const upcomingTasks = items
+    .filter(item => item.type === 'task' && !item.isCompleted && item.endDateTime)
+    .sort((a, b) => {
+      // 期限でソート
+      if (a.endDateTime && b.endDateTime) {
+        const diff = new Date(a.endDateTime).getTime() - new Date(b.endDateTime).getTime();
+        if (diff !== 0) return diff;
+      }
+      
+      // 期限が同じ場合は優先度でソート
+      const priorityOrder = { high: 3, medium: 2, low: 1 };
+      const aPriority = priorityOrder[a.priority || 'medium'];
+      const bPriority = priorityOrder[b.priority || 'medium'];
+      return bPriority - aPriority;
+    })
+    .slice(0, 3);
+
+  // 欲しい物リスト（優先度順、期限順、最大5件）
+  const wishList = items
+    .filter(item => item.type === 'need' && !item.isCompleted)
+    .sort((a, b) => {
+      // 優先度でソート
+      const priorityOrder = { high: 3, medium: 2, low: 1 };
+      const aPriority = priorityOrder[a.priority || 'medium'];
+      const bPriority = priorityOrder[b.priority || 'medium'];
+      if (aPriority !== bPriority) return bPriority - aPriority;
+      
+      // 期限があるものを優先
+      if (a.endDateTime && !b.endDateTime) return -1;
+      if (!a.endDateTime && b.endDateTime) return 1;
+      if (a.endDateTime && b.endDateTime) {
+        return new Date(a.endDateTime).getTime() - new Date(b.endDateTime).getTime();
+      }
+      
+      // 作成日時でソート（新しい順）
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    })
+    .slice(0, 5);
+
   return (
     <View style={styles.container}>
-      {/* ヘッダー */}
+      {/* ヘッダー（ホーム画面用 - 高さ大きめ） */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerTitle}>{selectedFamily?.name || 'ファミリータスク'}</Text>
-          {selectedFamily && (
-            <Text style={styles.headerSubtitle}>👥 {selectedFamily.members?.length || 0}人</Text>
-          )}
-        </View>
-        
-        {/* ユーザーアイコン */}
-        <TouchableOpacity 
-          style={styles.userIcon}
+        <Text style={styles.headerTitle}>
+          {selectedFamily?.name || 'ファミリータスク'}
+        </Text>
+        <TouchableOpacity
           onPress={() => setShowUserMenu(true)}
           activeOpacity={0.7}
         >
-          <Text style={styles.userIconText}>
-            {user?.email?.charAt(0).toUpperCase() || 'U'}
-          </Text>
+          <InitialAvatar
+            name={user?.displayName || user?.email || 'U'}
+            size={40}
+            backgroundColor="#2196F3"
+            textColor="#fff"
+          />
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* プレースホルダー（将来のタスク表示エリア） */}
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderTitle}>📋 今日のタスク</Text>
-          <Text style={styles.placeholderText}>
-            タスク管理機能は次のフェーズで実装予定です
-          </Text>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* 家族情報カード */}
+        {selectedFamily && (
+          <View style={styles.familyCard}>
+            <View style={styles.familyCardHeader}>
+              <Text style={styles.familyName}>{selectedFamily.name}</Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('FamilyManage')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.manageLink}>管理 →</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.memberCount}>
+              {selectedFamily.members?.length || 0}人のメンバー
+            </Text>
+            <View style={styles.memberList}>
+              {selectedFamily.members?.map((member) => (
+                <View key={member.userId} style={styles.memberBadge}>
+                  <Text style={styles.memberBadgeText}>👤 {member.displayName}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* 今日の予定 */}
+        <View style={styles.card}>
+          <View style={styles.cardTitleRow}>
+            <View style={styles.cardTitleLeft}>
+              <View style={[styles.cardIcon, { backgroundColor: '#2196F3' }]}>
+                <Text style={styles.cardIconText}>📅</Text>
+              </View>
+              <Text style={styles.cardTitle}>今日の予定</Text>
+            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('Main', {
+              screen: 'ItemListTab',
+              params: { type: 'event', selectAll: false }
+            })}>
+              <Text style={styles.viewAllText}>すべて見る →</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {todayEvents.length > 0 ? (
+            todayEvents.map(event => (
+              <TouchableOpacity
+                key={event.itemId}
+                style={[
+                  styles.itemRow, 
+                  { borderLeftColor: '#2196F3' },
+                  event.isCompleted && styles.itemRowCompleted
+                ]}
+                onPress={() => navigation.navigate('ItemDetail', { itemId: event.itemId })}
+                activeOpacity={0.7}
+              >
+                <View style={styles.itemLeft}>
+                  <Text style={[
+                    styles.itemTitle,
+                    event.isCompleted && styles.itemTitleCompleted
+                  ]}>
+                    {event.title}
+                  </Text>
+                  <Text style={[
+                    styles.itemMeta,
+                    event.isCompleted && styles.itemMetaCompleted
+                  ]}>
+                    {event.startDateTime && 
+                      new Date(event.startDateTime).toLocaleTimeString('ja-JP', { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                      })
+                    }
+                  </Text>
+                </View>
+                <View style={styles.itemRight}>
+                  {event.assignedToName && (
+                    <View style={styles.assigneeBadge}>
+                      <Text style={styles.assigneeBadgeText}>{event.assignedToName}</Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>今日の予定はありません</Text>
+          )}
         </View>
 
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderTitle}>📅 今日の予定</Text>
-          <Text style={styles.placeholderText}>
-            予定管理機能は次のフェーズで実装予定です
-          </Text>
+        {/* 期限が近いタスク */}
+        <View style={styles.card}>
+          <View style={styles.cardTitleRow}>
+            <View style={styles.cardTitleLeft}>
+              <View style={[styles.cardIcon, { backgroundColor: '#FF9800' }]}>
+                <Text style={styles.cardIconText}>⏰</Text>
+              </View>
+              <Text style={styles.cardTitle}>期限が近いタスク</Text>
+            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('Main', { 
+              screen: 'ItemListTab',
+              params: { type: 'task', selectAll: false }
+            })}>
+              <Text style={styles.viewAllText}>すべて見る →</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {upcomingTasks.length > 0 ? (
+            upcomingTasks.map(task => (
+              <TouchableOpacity
+                key={task.itemId}
+                style={[styles.itemRow, { borderLeftColor: '#FF9800' }]}
+                onPress={() => navigation.navigate('ItemDetail', { itemId: task.itemId })}
+                activeOpacity={0.7}
+              >
+                <View style={styles.itemLeft}>
+                  <Text style={styles.itemTitle}>{task.title}</Text>
+                  <Text style={styles.itemMeta}>
+                    期限: {task.endDateTime ? 
+                      new Date(task.endDateTime).toLocaleDateString('ja-JP', { 
+                        month: 'numeric', 
+                        day: 'numeric' 
+                      }) : '未設定'
+                    }
+                  </Text>
+                </View>
+                <View style={styles.itemRight}>
+                  {task.assignedToName && (
+                    <View style={styles.assigneeBadge}>
+                      <Text style={styles.assigneeBadgeText}>{task.assignedToName}</Text>
+                    </View>
+                  )}
+                  {task.location && (
+                    <Text style={styles.itemLocation}>📍 {task.location}</Text>
+                  )}
+                  {task.priority && (
+                    <Text style={styles.itemPriority}>{getPriorityEmoji(task.priority)}</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>期限が近いタスクはありません</Text>
+          )}
         </View>
 
-        <View style={styles.placeholderCard}>
-          <Text style={styles.placeholderTitle}>🛒 買い物リスト</Text>
-          <Text style={styles.placeholderText}>
-            必要物管理機能は次のフェーズで実装予定です
-          </Text>
+        {/* 欲しい物リスト */}
+        <View style={styles.card}>
+          <View style={styles.cardTitleRow}>
+            <View style={styles.cardTitleLeft}>
+              <View style={[styles.cardIcon, { backgroundColor: '#4CAF50' }]}>
+                <Text style={styles.cardIconText}>📋</Text>
+              </View>
+              <Text style={styles.cardTitle}>欲しい物リスト</Text>
+            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('Main', {
+              screen: 'ItemListTab',
+              params: { type: 'need', selectAll: false }
+            })}>
+              <Text style={styles.viewAllText}>すべて見る →</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {wishList.length > 0 ? (
+            wishList.map(need => (
+              <TouchableOpacity
+                key={need.itemId}
+                style={[styles.itemRow, { borderLeftColor: '#4CAF50' }]}
+                onPress={() => navigation.navigate('ItemDetail', { itemId: need.itemId })}
+                activeOpacity={0.7}
+              >
+                <View style={styles.itemLeft}>
+                  <Text style={styles.itemTitle}>{need.title}</Text>
+                  {need.endDateTime && (
+                    <Text style={styles.itemMeta}>
+                      期限: {new Date(need.endDateTime).toLocaleDateString('ja-JP', { 
+                        month: 'numeric', 
+                        day: 'numeric' 
+                      })}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.itemRight}>
+                  {need.assignedToName && (
+                    <View style={styles.assigneeBadge}>
+                      <Text style={styles.assigneeBadgeText}>{need.assignedToName}</Text>
+                    </View>
+                  )}
+                  {need.location && (
+                    <Text style={styles.itemLocation}>📍 {need.location}</Text>
+                  )}
+                  {need.priority && (
+                    <Text style={styles.itemPriority}>{getPriorityEmoji(need.priority)}</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <Text style={styles.emptyText}>欲しい物リストは空です</Text>
+          )}
         </View>
       </ScrollView>
+
+      {/* FAB（右下の新規作成ボタン） */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={handleCreateItem}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
 
       {/* ユーザーメニュー（モーダル） */}
       <Modal
@@ -137,11 +398,13 @@ export default function HomeScreen() {
             <View style={styles.userMenuHeader}>
               <View style={styles.userMenuIcon}>
                 <Text style={styles.userMenuIconText}>
-                  {user?.email?.charAt(0).toUpperCase() || 'U'}
+                  {user?.displayName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'U'}
                 </Text>
               </View>
               <View style={styles.userMenuInfo}>
-                <Text style={styles.userMenuName}>{user?.email?.split('@')[0] || 'ユーザー'}</Text>
+                <Text style={styles.userMenuName}>
+                  {user?.displayName || user?.email?.split('@')[0] || 'ユーザー'}
+                </Text>
                 <Text style={styles.userMenuEmail}>{user?.email || '不明'}</Text>
               </View>
             </View>
@@ -149,54 +412,30 @@ export default function HomeScreen() {
             <View style={styles.menuDivider} />
 
             {/* メニュー項目 */}
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => handleMenuAction('manage')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.menuItemIcon}>⚙️</Text>
-              <Text style={styles.menuItemText}>家族を管理</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={handleViewAllItems}>
+              <Text style={styles.menuItemText}>📋 一覧画面</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => handleMenuAction('switch')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.menuItemIcon}>🔄</Text>
-              <Text style={styles.menuItemText}>家族を切り替え</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={handleFamilyManage}>
+              <Text style={styles.menuItemText}>👥 家族管理</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={handleCategoryManage}>
+              <Text style={styles.menuItemText}>🏷️ カテゴリ管理</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={handleSwitchFamily}>
+              <Text style={styles.menuItemText}>🔄 家族を切り替え</Text>
             </TouchableOpacity>
 
             <View style={styles.menuDivider} />
 
-            <TouchableOpacity
-              style={[styles.menuItem, styles.logoutMenuItem]}
-              onPress={() => handleMenuAction('logout')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.menuItemIcon}>🚪</Text>
-              <Text style={[styles.menuItemText, styles.logoutText]}>ログアウト</Text>
+            <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+              <Text style={[styles.menuItemText, styles.logoutText]}>🚪 ログアウト</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Modal>
-      
-      {/* Web用のログアウト確認ダイアログ */}
-      <ConfirmDialog
-        visible={showLogoutDialog}
-        title="ログアウト"
-        message="ログアウトしますか？"
-        confirmText="ログアウト"
-        cancelText="キャンセル"
-        onConfirm={() => {
-          setShowLogoutDialog(false);
-          performLogout();
-        }}
-        onCancel={() => {
-          console.log('❌ ログアウトキャンセル');
-          setShowLogoutDialog(false);
-        }}
-      />
     </View>
   );
 }
@@ -206,6 +445,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  // ホーム画面のヘッダー（高さ大きめ）
   header: {
     backgroundColor: '#2196F3',
     paddingTop: 60,
@@ -214,101 +454,255 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  headerLeft: {
-    flex: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-  },
-  userIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  userIconText: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
   },
   content: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
-  placeholderCard: {
+  familyCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 20,
+    padding: 16,
     marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  familyCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  familyCardTitle: {
+    fontSize: 12,
+    color: '#999',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  manageLink: {
+    fontSize: 14,
+    color: '#2196F3',
+    fontWeight: '600',
+  },
+  familyName: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  memberCount: {
+    fontSize: 14,
+    color: '#999',
+  },
+  memberList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  memberBadge: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  memberBadgeText: {
+    fontSize: 13,
+    color: '#666',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cardTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  cardTitleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cardIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  placeholderTitle: {
+  cardIconText: {
+    fontSize: 16,
+  },
+  cardTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 8,
   },
-  placeholderText: {
+  viewAllText: {
+    fontSize: 14,
+    color: '#2196F3',
+    fontWeight: '600',
+  },
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  itemRowCompleted: {
+    opacity: 0.6,
+  },
+  itemContent: {
+    flex: 1,
+  },
+  itemLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+  itemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  itemTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  itemTitleCompleted: {
+    textDecorationLine: 'line-through',
+    color: '#999',
+  },
+  itemMeta: {
+    fontSize: 14,
+    color: '#999',
+  },
+  itemMetaCompleted: {
+    textDecorationLine: 'line-through',
+    color: '#ccc',
+  },
+  itemLocation: {
+    fontSize: 12,
+    color: '#666',
+  },
+  itemPriority: {
+    fontSize: 18,
+  },
+  assigneeBadge: {
+    backgroundColor: '#E3F2FD',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  assigneeBadgeText: {
+    fontSize: 12,
+    color: '#2196F3',
+    fontWeight: '600',
+  },
+  priorityBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+  },
+  priorityHigh: {
+    backgroundColor: '#FFEBEE',
+  },
+  priorityMedium: {
+    backgroundColor: '#FFF3E0',
+  },
+  priorityLow: {
+    backgroundColor: '#F5F5F5',
+  },
+  priorityBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  emptyText: {
     fontSize: 14,
     color: '#999',
     textAlign: 'center',
+    paddingVertical: 20,
   },
-  
-  // ユーザーメニュー（モーダル）
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    paddingTop: 100,
-    paddingRight: 20,
-  },
-  userMenuContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    width: 280,
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2196F3',
+    justifyContent: 'center',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },
+  fabIcon: {
+    fontSize: 32,
+    color: '#fff',
+    fontWeight: '300',
+  },
+
+  // モーダル
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  userMenuContainer: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 40,
+  },
   userMenuHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#f8f9fa',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
   },
   userMenuIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#2196F3',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   userMenuIconText: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
   },
@@ -316,39 +710,29 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userMenuName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 4,
   },
   userMenuEmail: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 14,
+    color: '#999',
   },
   menuDivider: {
     height: 1,
     backgroundColor: '#e0e0e0',
+    marginHorizontal: 20,
   },
   menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
+    paddingVertical: 16,
     paddingHorizontal: 20,
-  },
-  menuItemIcon: {
-    fontSize: 20,
-    marginRight: 12,
-    width: 24,
   },
   menuItemText: {
     fontSize: 16,
     color: '#333',
-    fontWeight: '500',
-  },
-  logoutMenuItem: {
-    backgroundColor: '#fff5f5',
   },
   logoutText: {
-    color: '#FF3B30',
+    color: '#f44336',
   },
 });
