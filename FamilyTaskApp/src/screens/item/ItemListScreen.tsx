@@ -13,17 +13,22 @@ import {
 } from 'react-native';
 // @ts-ignore - react-native-calendarsの型定義
 import { Calendar } from 'react-native-calendars';
-import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp, useFocusEffect, CompositeNavigationProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useItem } from '../../contexts/ItemContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useFamily } from '../../contexts/FamilyContext';
 import { ItemResponse, Priority, ItemType } from '../../types/item';
-import { RootStackParamList } from '../../types/navigation.types';
+import { BottomTabParamList, RootStackParamList } from '../../types/navigation.types';
+import FilterIcon from '../../components/FilterIcon';
 import { logger } from '../../utils/logger';
 
-type ItemListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
-type ItemListScreenRouteProp = RouteProp<RootStackParamList, 'ItemList'>;
+type ItemListScreenNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<BottomTabParamList, 'ItemListTab'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+type ItemListScreenRouteProp = RouteProp<BottomTabParamList, 'ItemListTab'>;
 
 // react-native-calendarsの型定義
 interface MarkedDates {
@@ -41,14 +46,25 @@ export default function ItemListScreen() {
   const { selectedFamily } = useFamily();
   const { items, categories, loading, loadItems, completeItem, uncompleteItem } = useItem();
   
-  // ルートパラメータから初期タイプを取得
+  // ルートパラメータから初期値を取得
   const initialType = route.params?.type;
+  const initialSelectAll = route.params?.selectAll;
+  const defaultView = route.params?.defaultView || 'list';
   
   // フィルター状態
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
-  const [selectedTypes, setSelectedTypes] = useState<ItemType[]>(
-    initialType ? [initialType] : ['task', 'event', 'need']
-  );
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>(defaultView);
+  const [selectedTypes, setSelectedTypes] = useState<ItemType[]>(() => {
+    // selectAllが明示的にtrueの場合は全タイプ
+    if (initialSelectAll === true) {
+      return ['task', 'event', 'need'];
+    }
+    // typeパラメータがある場合はそのタイプ
+    if (initialType) {
+      return [initialType];
+    }
+    // デフォルトは全タイプ
+    return ['task', 'event', 'need'];
+  });
   const [hideCompleted, setHideCompleted] = useState(true);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [selectedAssignee, setSelectedAssignee] = useState<string>('');
@@ -66,6 +82,53 @@ export default function ItemListScreen() {
   };
   
   const [selectedDate, setSelectedDate] = useState<string>(getTodayString());
+
+  // 今回のセッションで完了にしたアイテムIDを管理
+  const [justCompletedIds, setJustCompletedIds] = useState<Set<string>>(new Set());
+
+  // 画面フォーカス時にパラメータに基づいてフィルタをリセット
+  useFocusEffect(
+    React.useCallback(() => {
+      const paramType = route.params?.type;
+      const paramView = route.params?.defaultView;
+      const paramSelectAll = route.params?.selectAll;
+      
+      logger.info('📋 ItemListScreen focused', { paramType, paramView, paramSelectAll });
+      
+      // 優先順位: selectAll > type
+      if (paramSelectAll === true) {
+        // selectAllが明示的にtrueの場合は全タイプを選択
+        setSelectedTypes(['task', 'event', 'need']);
+        logger.info('📋 Filter reset: selectAll=true', { selectedTypes: ['task', 'event', 'need'] });
+      } else if (paramSelectAll === false && paramType) {
+        // selectAllがfalseで、かつtypeパラメータがある場合はそのタイプを選択
+        setSelectedTypes([paramType]);
+        logger.info('📋 Filter reset: type specified', { selectedTypes: [paramType] });
+      }
+      // どちらの条件も満たさない場合は現在の選択を維持（何もしない）
+      
+      // defaultViewパラメータがある場合はビューモードを設定
+      if (paramView) {
+        setViewMode(paramView);
+      }
+      
+      // その他のフィルタはリセット
+      setHideCompleted(true);
+      setSelectedCategoryId('');
+      setSelectedAssignee('');
+      setPriorityFilter('');
+      
+      // 完了アイテムのセッション管理もリセット
+      setJustCompletedIds(new Set());
+      
+      logger.info('📋 ItemListScreen focused - filters reset', { 
+        paramType, 
+        paramView, 
+        paramSelectAll,
+        selectedTypes: paramSelectAll ? ['task', 'event', 'need'] : paramType ? [paramType] : ['task', 'event', 'need']
+      });
+    }, [route.params?.type, route.params?.defaultView, route.params?.selectAll])
+  );
 
   useEffect(() => {
     // 画面表示時にアイテムを取得
@@ -104,9 +167,17 @@ export default function ItemListScreen() {
       if (item.isCompleted) {
         await uncompleteItem(item.itemId);
         logger.info('アイテムを未完了に戻しました');
+        // 未完了に戻したので、justCompletedIdsから削除
+        setJustCompletedIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(item.itemId);
+          return newSet;
+        });
       } else {
         await completeItem(item.itemId);
         logger.info('アイテムを完了にしました');
+        // 完了にしたので、justCompletedIdsに追加
+        setJustCompletedIds(prev => new Set(prev).add(item.itemId));
       }
     } catch (error: any) {
       logger.error('アイテムの完了切替エラー:', error);
@@ -166,6 +237,17 @@ export default function ItemListScreen() {
   // フィルター適用
   const filteredItems = items
     .filter(item => selectedTypes.includes(item.type))  // タイプフィルター
+    .filter(item => {
+      // 完了フィルター
+      if (hideCompleted && item.isCompleted) {
+        // 今回のセッションで完了にしたアイテムは表示する
+        if (justCompletedIds.has(item.itemId)) {
+          return true;
+        }
+        return false;
+      }
+      return true;
+    })
     .filter(item => {
       // 優先度フィルター（クライアント側で適用）
       if (priorityFilter && item.priority !== priorityFilter) return false;
@@ -292,19 +374,19 @@ export default function ItemListScreen() {
               </Text>
             </View>
             <View style={styles.itemMeta}>
-              {dateText && dateText.trim() !== '' && (
+              {dateText && dateText.trim() !== '' ? (
                 <Text style={styles.itemMetaText}>{dateText}</Text>
-              )}
-              {item.categoryName && item.categoryName.trim() !== '' && (
+              ) : null}
+              {item.categoryName && item.categoryName.trim() !== '' ? (
                 <Text style={styles.itemMetaText}>• {item.categoryName}</Text>
-              )}
-              {item.assignedToName && item.assignedToName.trim() !== '' && (
+              ) : null}
+              {item.assignedToName && item.assignedToName.trim() !== '' ? (
                 <Text style={styles.itemMetaText}>• {item.assignedToName}</Text>
-              )}
-              {item.location && item.location.trim() !== '' && (
+              ) : null}
+              {item.location && item.location.trim() !== '' ? (
                 <Text style={styles.itemMetaText}>• {item.location}</Text>
-              )}
-              {item.recurrence && (
+              ) : null}
+              {item.recurrence ? (
                 <Text style={styles.itemMetaText}>
                   • 🔄 {
                     item.recurrence.frequency === 'daily' ? '毎日' :
@@ -313,7 +395,7 @@ export default function ItemListScreen() {
                     '毎年'
                   }
                 </Text>
-              )}
+              ) : null}
             </View>
           </View>
         </View>
@@ -460,7 +542,7 @@ export default function ItemListScreen() {
           onPress={() => setShowFilterModal(true)}
           activeOpacity={0.7}
         >
-          <Text style={styles.filterIcon}>⚙️</Text>
+          <FilterIcon size={24} color="#666" />
           {activeFilterCount > 0 && (
             <View style={styles.filterBadge}>
               <Text style={styles.filterBadgeText}>{activeFilterCount}</Text>
@@ -520,6 +602,33 @@ export default function ItemListScreen() {
             
             <View style={styles.modalContent}>
               <Text style={styles.modalSubtitle}>複数選択可能（最低1つ選択必須）</Text>
+              
+              {/* すべて選択 */}
+              <TouchableOpacity
+                style={styles.checkboxOption}
+                onPress={() => {
+                  const allTypes: ItemType[] = ['task', 'event', 'need'];
+                  if (selectedTypes.length === allTypes.length) {
+                    // すべて選択されている場合は解除（ただし最低1つ必要なのでタスクだけ残す）
+                    setSelectedTypes(['task']);
+                  } else {
+                    // すべてを選択
+                    setSelectedTypes(allTypes);
+                  }
+                }}
+              >
+                <View style={[
+                  styles.checkboxSmall,
+                  selectedTypes.length === 3 && styles.checkboxSmallChecked
+                ]}>
+                  {selectedTypes.length === 3 && <Text style={styles.checkboxSmallCheck}>✓</Text>}
+                </View>
+                <Text style={[styles.checkboxOptionText, styles.checkboxOptionTextBold]}>
+                  ✨ すべて
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.divider} />
               
               <TouchableOpacity
                 style={styles.checkboxOption}
@@ -1107,6 +1216,14 @@ const styles = StyleSheet.create({
     color: '#333',
     marginLeft: 12,
   },
+  checkboxOptionTextBold: {
+    fontWeight: 'bold',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#e0e0e0',
+    marginVertical: 12,
+  },
   filterSection: {
     marginBottom: 24,
   },
@@ -1158,7 +1275,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   applyButton: {
-    flex: 1,
+    flex: 2,  // クリアボタンの2倍の幅
     paddingVertical: 12,
     borderRadius: 8,
     backgroundColor: '#2196F3',

@@ -4,6 +4,7 @@
  */
 
 import { NavigatorScreenParams } from '@react-navigation/native';
+import { ItemType } from './item';
 
 // ============================================
 // 認証関連のナビゲーションパラメータ
@@ -15,10 +16,22 @@ export type AuthStackParamList = {
 };
 
 // ============================================
-// メインアプリのナビゲーションパラメータ
+// BottomTabNavigator のパラメータ
 // ============================================
 
-import { ItemType } from './item';
+export type BottomTabParamList = {
+  HomeTab: undefined;
+  ItemListTab: { 
+    type?: ItemType; 
+    defaultView?: 'list' | 'calendar';
+    selectAll?: boolean;  // すべてのタイプを選択
+  } | undefined;
+  AnalyticsTab: undefined;
+};
+
+// ============================================
+// メインアプリのナビゲーションパラメータ
+// ============================================
 
 export type RootStackParamList = {
   // 家族選択前の画面
@@ -26,13 +39,12 @@ export type RootStackParamList = {
   CreateFamily: undefined;
   JoinFamily: undefined;
   
-  // 家族選択後の画面
-  Home: undefined;
+  // 家族選択後の画面 - BottomTabNavigator
+  Main: NavigatorScreenParams<BottomTabParamList> | undefined;
   FamilyManage: undefined;
   
   // アイテム管理画面（統合）
-  ItemList: { type?: ItemType } | undefined;  // typeで初期フィルターを指定可能
-  ItemForm: { itemId?: string; type?: ItemType } | undefined;  // 編集時はitemId、新規作成時はtype指定可能
+  ItemForm: { itemId?: string; type?: ItemType } | undefined;
   ItemDetail: { itemId: string };
   
   // カテゴリ管理画面

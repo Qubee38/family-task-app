@@ -15,6 +15,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useFamily } from '../contexts/FamilyContext';
 import { useItem } from '../contexts/ItemContext';
 import { RootStackParamList } from '../types/navigation.types';
+import { Priority } from '../types/item';
+import InitialAvatar from '../components/InitialAvatar';
 import { logger } from '../utils/logger';
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -73,11 +75,21 @@ export default function HomeScreen() {
   };
 
   const handleViewAllItems = () => {
-    navigation.navigate('ItemList');
+    navigation.navigate('Main', {screen: 'ItemListTab'});
   };
 
   const handleCreateItem = () => {
     navigation.navigate('ItemForm', { type: 'task' });
+  };
+
+  // 優先度に応じた絵文字を取得
+  const getPriorityEmoji = (priority?: Priority): string => {
+    switch (priority) {
+      case 'high': return '🔴';
+      case 'medium': return '🟡';
+      case 'low': return '🟢';
+      default: return '';
+    }
   };
 
   // 今日の日付
@@ -143,13 +155,19 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {/* ヘッダー（ホーム画面用 - 高さ大きめ） */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>ファミリータスク</Text>
+        <Text style={styles.headerTitle}>
+          {selectedFamily?.name || 'ファミリータスク'}
+        </Text>
         <TouchableOpacity
-          style={styles.userButton}
           onPress={() => setShowUserMenu(true)}
           activeOpacity={0.7}
         >
-          <Text style={styles.userButtonText}>👥</Text>
+          <InitialAvatar
+            name={user?.displayName || user?.email || 'U'}
+            size={40}
+            backgroundColor="#2196F3"
+            textColor="#fff"
+          />
         </TouchableOpacity>
       </View>
 
@@ -159,10 +177,16 @@ export default function HomeScreen() {
           <View style={styles.familyCard}>
             <View style={styles.familyCardHeader}>
               <Text style={styles.familyName}>{selectedFamily.name}</Text>
-              <Text style={styles.memberCount}>
-                メンバー: {selectedFamily.members?.length || 0}人
-              </Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('FamilyManage')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.manageLink}>管理 →</Text>
+              </TouchableOpacity>
             </View>
+            <Text style={styles.memberCount}>
+              {selectedFamily.members?.length || 0}人のメンバー
+            </Text>
             <View style={styles.memberList}>
               {selectedFamily.members?.map((member) => (
                 <View key={member.userId} style={styles.memberBadge}>
@@ -182,7 +206,10 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.cardTitle}>今日の予定</Text>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('ItemList', { type: 'event' })}>
+            <TouchableOpacity onPress={() => navigation.navigate('Main', {
+              screen: 'ItemListTab',
+              params: { type: 'event', selectAll: false }
+            })}>
               <Text style={styles.viewAllText}>すべて見る →</Text>
             </TouchableOpacity>
           </View>
@@ -191,13 +218,25 @@ export default function HomeScreen() {
             todayEvents.map(event => (
               <TouchableOpacity
                 key={event.itemId}
-                style={[styles.itemRow, { borderLeftColor: '#2196F3' }]}
+                style={[
+                  styles.itemRow, 
+                  { borderLeftColor: '#2196F3' },
+                  event.isCompleted && styles.itemRowCompleted
+                ]}
                 onPress={() => navigation.navigate('ItemDetail', { itemId: event.itemId })}
                 activeOpacity={0.7}
               >
-                <View style={styles.itemContent}>
-                  <Text style={styles.itemTitle}>{event.title}</Text>
-                  <Text style={styles.itemMeta}>
+                <View style={styles.itemLeft}>
+                  <Text style={[
+                    styles.itemTitle,
+                    event.isCompleted && styles.itemTitleCompleted
+                  ]}>
+                    {event.title}
+                  </Text>
+                  <Text style={[
+                    styles.itemMeta,
+                    event.isCompleted && styles.itemMetaCompleted
+                  ]}>
                     {event.startDateTime && 
                       new Date(event.startDateTime).toLocaleTimeString('ja-JP', { 
                         hour: '2-digit', 
@@ -206,11 +245,13 @@ export default function HomeScreen() {
                     }
                   </Text>
                 </View>
-                {event.assignedToName && (
-                  <View style={styles.assigneeBadge}>
-                    <Text style={styles.assigneeBadgeText}>{event.assignedToName}</Text>
-                  </View>
-                )}
+                <View style={styles.itemRight}>
+                  {event.assignedToName && (
+                    <View style={styles.assigneeBadge}>
+                      <Text style={styles.assigneeBadgeText}>{event.assignedToName}</Text>
+                    </View>
+                  )}
+                </View>
               </TouchableOpacity>
             ))
           ) : (
@@ -227,7 +268,10 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.cardTitle}>期限が近いタスク</Text>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('ItemList', { type: 'task' })}>
+            <TouchableOpacity onPress={() => navigation.navigate('Main', { 
+              screen: 'ItemListTab',
+              params: { type: 'task', selectAll: false }
+            })}>
               <Text style={styles.viewAllText}>すべて見る →</Text>
             </TouchableOpacity>
           </View>
@@ -240,7 +284,7 @@ export default function HomeScreen() {
                 onPress={() => navigation.navigate('ItemDetail', { itemId: task.itemId })}
                 activeOpacity={0.7}
               >
-                <View style={styles.itemContent}>
+                <View style={styles.itemLeft}>
                   <Text style={styles.itemTitle}>{task.title}</Text>
                   <Text style={styles.itemMeta}>
                     期限: {task.endDateTime ? 
@@ -251,18 +295,19 @@ export default function HomeScreen() {
                     }
                   </Text>
                 </View>
-                {task.priority && (
-                  <View style={[
-                    styles.priorityBadge,
-                    task.priority === 'high' ? styles.priorityHigh :
-                    task.priority === 'medium' ? styles.priorityMedium :
-                    styles.priorityLow
-                  ]}>
-                    <Text style={styles.priorityBadgeText}>
-                      {task.priority === 'high' ? '高' : task.priority === 'medium' ? '中' : '低'}
-                    </Text>
-                  </View>
-                )}
+                <View style={styles.itemRight}>
+                  {task.assignedToName && (
+                    <View style={styles.assigneeBadge}>
+                      <Text style={styles.assigneeBadgeText}>{task.assignedToName}</Text>
+                    </View>
+                  )}
+                  {task.location && (
+                    <Text style={styles.itemLocation}>📍 {task.location}</Text>
+                  )}
+                  {task.priority && (
+                    <Text style={styles.itemPriority}>{getPriorityEmoji(task.priority)}</Text>
+                  )}
+                </View>
               </TouchableOpacity>
             ))
           ) : (
@@ -279,7 +324,10 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.cardTitle}>欲しい物リスト</Text>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('ItemList', { type: 'need' })}>
+            <TouchableOpacity onPress={() => navigation.navigate('Main', {
+              screen: 'ItemListTab',
+              params: { type: 'need', selectAll: false }
+            })}>
               <Text style={styles.viewAllText}>すべて見る →</Text>
             </TouchableOpacity>
           </View>
@@ -288,15 +336,34 @@ export default function HomeScreen() {
             wishList.map(need => (
               <TouchableOpacity
                 key={need.itemId}
-                style={styles.needRow}
+                style={[styles.itemRow, { borderLeftColor: '#4CAF50' }]}
                 onPress={() => navigation.navigate('ItemDetail', { itemId: need.itemId })}
                 activeOpacity={0.7}
               >
-                <View style={styles.checkbox} />
-                <Text style={styles.needTitle}>{need.title}</Text>
-                {need.location && (
-                  <Text style={styles.needLocation}>{need.location}</Text>
-                )}
+                <View style={styles.itemLeft}>
+                  <Text style={styles.itemTitle}>{need.title}</Text>
+                  {need.endDateTime && (
+                    <Text style={styles.itemMeta}>
+                      期限: {new Date(need.endDateTime).toLocaleDateString('ja-JP', { 
+                        month: 'numeric', 
+                        day: 'numeric' 
+                      })}
+                    </Text>
+                  )}
+                </View>
+                <View style={styles.itemRight}>
+                  {need.assignedToName && (
+                    <View style={styles.assigneeBadge}>
+                      <Text style={styles.assigneeBadgeText}>{need.assignedToName}</Text>
+                    </View>
+                  )}
+                  {need.location && (
+                    <Text style={styles.itemLocation}>📍 {need.location}</Text>
+                  )}
+                  {need.priority && (
+                    <Text style={styles.itemPriority}>{getPriorityEmoji(need.priority)}</Text>
+                  )}
+                </View>
               </TouchableOpacity>
             ))
           ) : (
@@ -331,11 +398,13 @@ export default function HomeScreen() {
             <View style={styles.userMenuHeader}>
               <View style={styles.userMenuIcon}>
                 <Text style={styles.userMenuIconText}>
-                  {user?.email?.charAt(0).toUpperCase() || 'U'}
+                  {user?.displayName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'U'}
                 </Text>
               </View>
               <View style={styles.userMenuInfo}>
-                <Text style={styles.userMenuName}>{user?.email?.split('@')[0] || 'ユーザー'}</Text>
+                <Text style={styles.userMenuName}>
+                  {user?.displayName || user?.email?.split('@')[0] || 'ユーザー'}
+                </Text>
                 <Text style={styles.userMenuEmail}>{user?.email || '不明'}</Text>
               </View>
             </View>
@@ -396,17 +465,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
-  userButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  userButtonText: {
-    fontSize: 24,
-  },
   content: {
     flex: 1,
     padding: 16,
@@ -426,10 +484,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  familyCardTitle: {
+    fontSize: 12,
+    color: '#999',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  manageLink: {
+    fontSize: 14,
+    color: '#2196F3',
+    fontWeight: '600',
   },
   familyName: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#333',
   },
@@ -498,13 +567,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingLeft: 12,
-    paddingVertical: 12,
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 8,
     marginBottom: 8,
-    borderLeftWidth: 4,
+    borderLeftWidth: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  itemRowCompleted: {
+    opacity: 0.6,
   },
   itemContent: {
     flex: 1,
+  },
+  itemLeft: {
+    flex: 1,
+    marginRight: 12,
+  },
+  itemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   itemTitle: {
     fontSize: 16,
@@ -512,9 +599,24 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 4,
   },
+  itemTitleCompleted: {
+    textDecorationLine: 'line-through',
+    color: '#999',
+  },
   itemMeta: {
     fontSize: 14,
     color: '#999',
+  },
+  itemMetaCompleted: {
+    textDecorationLine: 'line-through',
+    color: '#ccc',
+  },
+  itemLocation: {
+    fontSize: 12,
+    color: '#666',
+  },
+  itemPriority: {
+    fontSize: 18,
   },
   assigneeBadge: {
     backgroundColor: '#E3F2FD',
@@ -544,30 +646,6 @@ const styles = StyleSheet.create({
   priorityBadgeText: {
     fontSize: 12,
     fontWeight: '600',
-  },
-  needRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#ccc',
-    marginRight: 12,
-  },
-  needTitle: {
-    flex: 1,
-    fontSize: 15,
-    color: '#333',
-  },
-  needLocation: {
-    fontSize: 12,
-    color: '#999',
   },
   emptyText: {
     fontSize: 14,

@@ -44,7 +44,9 @@ export default function CreateEditCategoryScreen() {
   };
 
   const handleSave = async () => {
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    
+    if (!trimmedName) {
       const message = 'カテゴリ名を入力してください';
       if (Platform.OS === 'web') {
         alert(message);
@@ -58,7 +60,7 @@ export default function CreateEditCategoryScreen() {
       if (isEditMode && categoryId) {
         // 編集モード
         const data: CategoryUpdateRequest = {
-          name: name.trim(),
+          name: trimmedName,
           points: points ? parseInt(points) : undefined,
           suggestedFor: suggestedFor.length > 0 ? suggestedFor : undefined,
         };
@@ -68,7 +70,7 @@ export default function CreateEditCategoryScreen() {
       } else {
         // 作成モード
         const data: CategoryCreateRequest = {
-          name: name.trim(),
+          name: trimmedName,
           points: points ? parseInt(points) : undefined,
           suggestedFor: suggestedFor.length > 0 ? suggestedFor : [],
         };

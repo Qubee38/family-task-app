@@ -4,21 +4,25 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useFamily } from '../contexts/FamilyContext';
+import { RootStackParamList } from '../types/navigation.types';
 import AuthNavigator from './AuthNavigator';
-import HomeScreen from '../screens/HomeScreen';
+import BottomTabNavigator from './BottomTabNavigator';
 import FamilyListScreen from '../screens/family/FamilyListScreen';
 import CreateFamilyScreen from '../screens/family/CreateFamilyScreen';
 import JoinFamilyScreen from '../screens/family/JoinFamilyScreen';
 import FamilyManageScreen from '../screens/family/FamilyManageScreen';
-import ItemListScreen from '../screens/item/ItemListScreen';
 import ItemFormScreen from '../screens/item/ItemFormScreen';
 import ItemDetailScreen from '../screens/item/ItemDetailScreen';
 import CategoryListScreen from '../screens/item/CategoryListScreen';
 import CreateEditCategoryScreen from '../screens/item/CreateEditCategoryScreen';
 import { logger } from '../utils/logger';
 
-const Stack = createStackNavigator();
+const Stack = createStackNavigator<RootStackParamList>();
 
+/**
+ * AppNavigator
+ * アプリ全体のナビゲーション構造を管理
+ */
 export default function AppNavigator() {
   const { user, loading: authLoading } = useAuth();
   const { selectedFamily, families, loading: familyLoading } = useFamily();
@@ -26,22 +30,20 @@ export default function AppNavigator() {
 
   // selectedFamilyの変化を監視して画面遷移
   useEffect(() => {
-    if (!user) return; // ログインしていない場合は何もしない
-    if (familyLoading) return; // 家族情報ローディング中は何もしない
-    if (!navigationRef.current) return; // ナビゲーションが準備できていない
+    if (!user) return;
+    if (familyLoading) return;
+    if (!navigationRef.current) return;
 
     const currentRoute = navigationRef.current.getCurrentRoute()?.name;
     
     if (selectedFamily) {
       // 家族が選択されている場合
-      logger.info(`🔹 selectedFamily検出、HomeScreenへ遷移: ${selectedFamily.name}`);
+      logger.info(`🔹 selectedFamily検出、Mainへ遷移: ${selectedFamily.name}`);
       
-      // CreateFamilyScreen または JoinFamilyScreen からの遷移の場合のみ
       if (currentRoute === 'CreateFamily' || currentRoute === 'JoinFamily') {
-        navigationRef.current.navigate('Home');
+        navigationRef.current.navigate('Main');
       } else if (currentRoute === 'FamilyList') {
-        // FamilyListScreen で家族を選択した場合も遷移
-        navigationRef.current.navigate('Home');
+        navigationRef.current.navigate('Main');
       }
     } else {
       // 家族が選択されていない場合
@@ -67,22 +69,21 @@ export default function AppNavigator() {
         // ログイン前: AuthNavigator
         <AuthNavigator />
       ) : (
-        // ログイン後: 全画面を登録（初期画面は selectedFamily の有無で決定）
+        // ログイン後: 全画面を登録
         <Stack.Navigator 
           screenOptions={{ headerShown: false }}
-          initialRouteName={selectedFamily ? 'Home' : 'FamilyList'}
+          initialRouteName={selectedFamily ? 'Main' : 'FamilyList'}
         >
           {/* 家族選択前の画面 */}
           <Stack.Screen name="FamilyList" component={FamilyListScreen} />
           <Stack.Screen name="CreateFamily" component={CreateFamilyScreen} />
           <Stack.Screen name="JoinFamily" component={JoinFamilyScreen} />
           
-          {/* 家族選択後の画面 */}
-          <Stack.Screen name="Home" component={HomeScreen} />
+          {/* 家族選択後の画面 - BottomTabNavigator */}
+          <Stack.Screen name="Main" component={BottomTabNavigator} />
           <Stack.Screen name="FamilyManage" component={FamilyManageScreen} />
           
-          {/* アイテム管理画面（統合） */}
-          <Stack.Screen name="ItemList" component={ItemListScreen} />
+          {/* アイテム管理画面 */}
           <Stack.Screen name="ItemForm" component={ItemFormScreen} />
           <Stack.Screen name="ItemDetail" component={ItemDetailScreen} />
           

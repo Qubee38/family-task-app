@@ -80,9 +80,9 @@ export default function ItemDetailScreen() {
     need: { 
       bg: '#2196F3', 
       title: '詳細',
-      completedText: '✓ 購入済み',
-      pendingText: '⏳ 未購入',
-      actionText: item.isCompleted ? '未購入に戻す' : '購入済みにする',
+      completedText: '✓ 入手済み',
+      pendingText: '⏳ 未入手',
+      actionText: item.isCompleted ? '未入手に戻す' : '入手済みにする',
     },
   }[item.type];
 
@@ -215,21 +215,16 @@ export default function ItemDetailScreen() {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* タイトル */}
+        {/* タイトル + ステータスバッジ */}
         <View style={styles.titleSection}>
           <Text style={[styles.title, item.isCompleted && styles.titleCompleted]}>
             {item.title}
           </Text>
-        </View>
-
-        {/* ステータスバッジ */}
-        <View style={styles.badgeContainer}>
           <View style={[
-            styles.badge, 
-            item.isCompleted ? styles.badgeCompleted : styles.badgePending,
-            { backgroundColor: item.isCompleted ? typeConfig.bg : '#FFC107' }
+            styles.statusBadge, 
+            item.isCompleted ? styles.statusBadgeCompleted : styles.statusBadgePending,
           ]}>
-            <Text style={styles.badgeText}>
+            <Text style={styles.statusBadgeText}>
               {item.isCompleted ? typeConfig.completedText : typeConfig.pendingText}
             </Text>
           </View>
@@ -432,35 +427,33 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
+    flex: 1,
+    marginRight: 12,
   },
   titleCompleted: {
     textDecorationLine: 'line-through',
     color: '#999',
   },
-  badgeContainer: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  badge: {
+  statusBadge: {
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 16,
   },
-  badgeCompleted: {
-    // backgroundColor: タイプごとに動的設定
+  statusBadgeCompleted: {
+    backgroundColor: '#2196F3',
   },
-  badgePending: {
-    // backgroundColor: タイプごとに動的設定
+  statusBadgePending: {
+    backgroundColor: '#FFC107',
   },
-  badgeText: {
+  statusBadgeText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#fff',

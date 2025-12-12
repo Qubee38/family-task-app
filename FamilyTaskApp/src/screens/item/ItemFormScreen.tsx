@@ -370,7 +370,11 @@ export default function ItemFormScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        contentContainerStyle={{ paddingBottom: 100 }}
+        showsVerticalScrollIndicator={true}
+      >
         {/* タイプ選択（新規作成時のみ） */}
         {!isEditMode && (
           <View style={styles.section}>
