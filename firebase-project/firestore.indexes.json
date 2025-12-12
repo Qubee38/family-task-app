@@ -1,4 +1,40 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "Items",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "familyId", "order": "ASCENDING" },
+        { "fieldPath": "endDateTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "Items",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "familyId", "order": "ASCENDING" },
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "endDateTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "Items",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "familyId", "order": "ASCENDING" },
+        { "fieldPath": "isCompleted", "order": "ASCENDING" },
+        { "fieldPath": "type", "order": "ASCENDING" },
+        { "fieldPath": "endDateTime", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "Categories",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "familyId", "order": "ASCENDING" },
+        { "fieldPath": "usageCount", "order": "DESCENDING" }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

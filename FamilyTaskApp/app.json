@@ -12,12 +12,16 @@
       "backgroundColor": "#ffffff"
     },
     "extra": {
-      "apiBaseUrl": "http://localhost:8000",
-      "useFirebaseEmulator": true,
-      "firebaseAuthEmulatorHost": "localhost",
-      "firebaseAuthEmulatorPort": 9099,
-      "firestoreEmulatorHost": "localhost",
-      "firestoreEmulatorPort": 8080
+      "apiBaseUrl": "https://family-task-backend.onrender.com",
+      "useFirebaseEmulator": false,
+      "firebaseConfig": {
+        "apiKey": "AIzaSyA2E_uobfUYFzCtomQK5QPY4oXA4FSuwRc",
+        "authDomain": "family-task-app-f4faa.firebaseapp.com",
+        "projectId": "family-task-app-f4faa",
+        "storageBucket": "family-task-app-f4faa.firebasestorage.app",
+        "messagingSenderId": "1011910194098",
+        "appId": "1:1011910194098:web:3ed01cc24eb6751a9deaab"
+      }
     },
     "assetBundlePatterns": [
       "**/*"

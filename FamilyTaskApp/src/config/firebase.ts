@@ -12,15 +12,36 @@ const expoConfig = Constants.expoConfig?.extra || {};
 console.log('🔹 Expo config:', expoConfig);
 console.log('🔹 useFirebaseEmulator:', expoConfig.useFirebaseEmulator);
 
-// Firebase設定
-const firebaseConfig = {
-  apiKey: "demo-api-key",
-  authDomain: "demo-project.firebaseapp.com",
-  projectId: "demo-project",
-  storageBucket: "demo-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
-};
+// Firebase設定の決定
+let firebaseConfig;
+const useEmulator = expoConfig.useFirebaseEmulator === true;
+
+if (useEmulator) {
+  // Emulator用のダミー設定
+  console.log('🔹 Using Firebase Emulator config');
+  firebaseConfig = {
+    apiKey: "demo-api-key",
+    authDomain: "demo-project.firebaseapp.com",
+    projectId: "demo-project",
+    storageBucket: "demo-project.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:abcdef"
+  };
+} else {
+  // 本番用の設定（app.jsonから取得）
+  console.log('🔹 Using Production Firebase config');
+  firebaseConfig = expoConfig.firebaseConfig;
+  
+  if (!firebaseConfig) {
+    throw new Error('Firebase config not found in app.json extra.firebaseConfig');
+  }
+  
+  console.log('🔹 Production Firebase config loaded:', {
+    apiKey: firebaseConfig.apiKey ? '✓' : '✗',
+    authDomain: firebaseConfig.authDomain,
+    projectId: firebaseConfig.projectId
+  });
+}
 
 // Firebase初期化
 const app = initializeApp(firebaseConfig);
@@ -36,9 +57,6 @@ export const initFirebase = () => {
     console.log('🔹 Already connected, skipping');
     return;
   }
-
-  const useEmulator = expoConfig.useFirebaseEmulator === true;
-  console.log('🔹 useEmulator:', useEmulator);
   
   if (useEmulator) {
     const authHost = expoConfig.firebaseAuthEmulatorHost || 'localhost';
@@ -72,8 +90,8 @@ export const initFirebase = () => {
       }
     }
   } else {
-    console.log('🔹 Using production Firebase');
-    logger.info('本番Firebase使用');
+    console.log('🔹 Using production Firebase (no emulator connection needed)');
+    logger.info('✅ 本番Firebase使用');
   }
 };
 
