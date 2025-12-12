@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     USE_FIREBASE_EMULATOR: bool = False
     FIRESTORE_EMULATOR_HOST: str = "firebase-emulator:8080"
     FIREBASE_AUTH_EMULATOR_HOST: str = "firebase-emulator:9099"
+    FIREBASE_CREDENTIALS: Optional[str] = None  # 追加: JSON文字列（Render.com用）
     FIREBASE_CREDENTIALS_PATH: Optional[str] = None
     FIREBASE_PROJECT_ID: str = "demo-project"
     

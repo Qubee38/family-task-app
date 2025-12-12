@@ -1,4 +1,5 @@
 import os
+import json
 import firebase_admin
 from firebase_admin import credentials, auth
 from google.cloud import firestore
@@ -40,10 +41,31 @@ def init_firebase():
     else:
         logger.info("Connecting to Production Firebase")
         
-        if not settings.FIREBASE_CREDENTIALS_PATH:
-            raise ValueError("FIREBASE_CREDENTIALS_PATH is required for production")
+        # 認証情報の読み込み（優先順位: FIREBASE_CREDENTIALS > FIREBASE_CREDENTIALS_PATH）
+        if settings.FIREBASE_CREDENTIALS:
+            # JSON文字列から認証情報を読み込み（Render.com用）
+            try:
+                logger.info("Loading Firebase credentials from FIREBASE_CREDENTIALS (JSON string)")
+                cred_dict = json.loads(settings.FIREBASE_CREDENTIALS)
+                cred = credentials.Certificate(cred_dict)
+                logger.info("✓ Firebase credentials loaded successfully")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse FIREBASE_CREDENTIALS: {e}")
+                raise ValueError("FIREBASE_CREDENTIALS must be a valid JSON string")
+        elif settings.FIREBASE_CREDENTIALS_PATH:
+            # ファイルパスから認証情報を読み込み（ローカル開発用）
+            logger.info(f"Loading Firebase credentials from {settings.FIREBASE_CREDENTIALS_PATH}")
+            if not os.path.exists(settings.FIREBASE_CREDENTIALS_PATH):
+                raise ValueError(f"FIREBASE_CREDENTIALS_PATH not found: {settings.FIREBASE_CREDENTIALS_PATH}")
+            cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+            logger.info("✓ Firebase credentials loaded successfully")
+        else:
+            raise ValueError(
+                "Either FIREBASE_CREDENTIALS (JSON string) or "
+                "FIREBASE_CREDENTIALS_PATH (file path) is required for production"
+            )
         
-        cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+        # Firebase Admin SDK初期化
         firebase_admin.initialize_app(cred)
         
         # 本番用Firestoreクライアント
